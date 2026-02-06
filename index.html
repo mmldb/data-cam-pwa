@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V8</title>
+    <title>DATA_DECAY_V9_CHAOS</title>
     <style>
         :root {
             --bg: #050505;
-            --main: #ffffff; /* Default to White */
+            --main: #ffffff; 
             --text-font: 'Courier New', Courier, monospace;
         }
 
@@ -33,7 +33,7 @@
             z-index: 1;
         }
 
-        /* --- MINIMALIST UI --- */
+        /* --- UI --- */
         #ui-container {
             position: absolute;
             top: 0;
@@ -56,7 +56,6 @@
             pointer-events: auto;
         }
 
-        /* Floating Sliders (No background box) */
         .slider-group {
             display: flex;
             flex-direction: column;
@@ -69,17 +68,13 @@
             align-items: center;
             width: 100%;
             color: var(--main);
-            text-shadow: 0px 1px 3px rgba(0,0,0,0.8); /* Shadow for readability */
+            text-shadow: 0px 1px 3px rgba(0,0,0,0.8);
             font-weight: bold;
             font-size: 14px;
         }
 
-        .label {
-            width: 80px;
-            letter-spacing: 1px;
-        }
+        .label { width: 80px; letter-spacing: 1px; }
 
-        /* Custom "Volume" Line Sliders */
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
@@ -90,7 +85,6 @@
         
         input[type=range]:focus { outline: none; }
 
-        /* The Line */
         input[type=range]::-webkit-slider-runnable-track {
             width: 100%;
             height: 2px;
@@ -99,7 +93,6 @@
             box-shadow: 0px 1px 2px rgba(0,0,0,0.8);
         }
 
-        /* The Thumb (Circle) */
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
             height: 16px;
@@ -111,7 +104,6 @@
             box-shadow: 0px 1px 5px rgba(0,0,0,0.5);
         }
 
-        /* Bottom Buttons */
         .button-row {
             display: flex;
             justify-content: space-between;
@@ -131,12 +123,7 @@
             text-shadow: 0px 1px 3px rgba(0,0,0,1);
             padding: 10px;
         }
-        
-        button.active {
-            text-decoration: underline;
-        }
 
-        /* Start Screen */
         #start-screen {
             position: absolute;
             top: 50%;
@@ -151,6 +138,7 @@
             padding: 15px 30px; 
             font-size: 16px;
             background: rgba(0,0,0,0.5);
+            color: var(--main);
         }
 
         .version {
@@ -177,14 +165,14 @@
     
     <div id="start-screen">
         <button id="start-btn">INITIALIZE</button>
-        <div class="version">V8.0_BETA</div>
+        <div class="version">V9.0_CHAOS_GRID</div>
     </div>
 
     <div id="ui-container">
         <div class="slider-group">
             <div class="slider-row">
                 <span class="label">GRID</span>
-                <input type="range" id="input-grid" min="8" max="40" value="14">
+                <input type="range" id="input-grid" min="10" max="50" value="16">
             </div>
             <div class="slider-row">
                 <span class="label">FPS</span>
@@ -196,7 +184,7 @@
             </div>
             <div class="slider-row">
                 <span class="label">CONTRAST</span>
-                <input type="range" id="input-contrast" min="0" max="200" value="0">
+                <input type="range" id="input-contrast" min="0" max="200" value="20">
             </div>
         </div>
 
@@ -217,26 +205,23 @@
         const startBtn = document.getElementById('start-btn');
         const uiContainer = document.getElementById('ui-container');
         
-        // Inputs
         const inputGrid = document.getElementById('input-grid');
         const inputFps = document.getElementById('input-fps');
         const inputFade = document.getElementById('input-fade');
         const inputContrast = document.getElementById('input-contrast');
         
-        // Buttons
         const flipBtn = document.getElementById('flip-btn');
         const colorBtn = document.getElementById('color-btn');
         const bgBtn = document.getElementById('bg-btn');
 
-        // Config
         let config = {
-            gridSize: 14, 
+            gridSize: 16, 
             targetFPS: 30,
             fadeAlpha: 0.3, 
-            contrast: 0,
-            colorMode: 0, // 0=White, 1=Yellow, 2=Green, 3=Real, 4=NOISE
+            contrast: 20,
+            colorMode: 0, 
             showLiveBg: false,
-            threshold: 70,
+            threshold: 60,
             facingMode: 'environment',
             mainColor: '#FFFFFF'
         };
@@ -244,6 +229,7 @@
         let width, height, stream;
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
+        const microChars = "10.:"; // Chars for dense clusters
 
         // Tracker
         let trackers = [];
@@ -257,7 +243,6 @@
                 this.active = true;
                 this.mass = 1; 
             }
-
             update(data, cols, rows, brightnessMap) {
                 this.life--;
                 if (this.life <= 0) this.active = false;
@@ -278,14 +263,12 @@
                     this.gx = sumX / count; this.gy = sumY / count; this.mass = count; 
                 } else { this.life -= 5; }
             }
-
             draw(ctx) {
                 const screenX = this.gx * config.gridSize;
                 const screenY = this.gy * config.gridSize;
                 let boxSize = config.gridSize + (this.mass * (config.gridSize * 0.2));
                 if(boxSize > config.gridSize * 10) boxSize = config.gridSize * 10;
                 
-                // Trackers always white or red in noise mode? Let's stick to main color or white
                 ctx.strokeStyle = (config.colorMode === 4) ? '#fff' : config.mainColor;
                 ctx.lineWidth = 1;
                 ctx.strokeRect(screenX - boxSize/2, screenY - boxSize/2, boxSize, boxSize);
@@ -309,7 +292,6 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Toggle UI
         document.addEventListener('click', (e) => {
             if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.slider-group')) return;
             if(startBtn.style.display === 'none') {
@@ -341,13 +323,11 @@
             if (time - lastTime < interval) return;
             lastTime = time;
 
-            // Read Inputs
             config.gridSize = parseInt(inputGrid.value);
             config.targetFPS = parseInt(inputFps.value);
             config.fadeAlpha = parseInt(inputFade.value) / 100;
             config.contrast = parseInt(inputContrast.value);
 
-            // Aspect Ratio
             const vWidth = video.videoWidth;
             const vHeight = video.videoHeight;
             if (vWidth === 0) return;
@@ -356,32 +336,23 @@
             const xOffset = (width - (vWidth * scale)) / 2;
             const yOffset = (height - (vHeight * scale)) / 2;
 
-            // --- BACKGROUND LOGIC ---
+            // BG Logic
             if (config.showLiveBg) {
-                // DRAW VIDEO
                 ctx.save();
                 if(config.facingMode === 'user') { ctx.translate(width, 0); ctx.scale(-1, 1); }
                 ctx.drawImage(video, xOffset, yOffset, vWidth * scale, vHeight * scale);
                 ctx.restore();
-                
-                // DRAW DIMMER (Controlled by Decay Slider)
-                // If Slider is 0 -> 0% Dim. If Slider is 100 -> 80% Dim.
                 const dimVal = config.fadeAlpha * 0.9; 
                 ctx.fillStyle = `rgba(0, 0, 0, ${dimVal})`;
                 ctx.fillRect(0, 0, width, height);
             } else {
-                // NORMAL TRAIL EFFECT
-                // If slider is 100 -> Alpha 1.0 (Instant clear, no trails)
-                // If slider is 0 -> Alpha 0.0 (Infinite trails)
-                // We map slider 0-100 to alpha 0.05-0.5 for better usability
-                // Let's stick to direct mapping but clamped
                 let trailAlpha = config.fadeAlpha;
                 if(trailAlpha < 0.05) trailAlpha = 0.05; 
                 ctx.fillStyle = `rgba(5, 5, 5, ${trailAlpha})`;
                 ctx.fillRect(0, 0, width, height);
             }
 
-            // --- DATA GRID ---
+            // --- ANALYSIS PASS ---
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
             const tempCanvas = document.createElement('canvas');
@@ -400,10 +371,12 @@
             const contrastFactor = (259 * (config.contrast + 255)) / (255 * (259 - config.contrast));
             const brightnessMap = new Float32Array(cols * rows);
 
-            ctx.font = `${config.gridSize}px monospace`;
+            // --- ADAPTIVE GRID RENDER ---
             ctx.textBaseline = 'top';
 
+            // Loop Y normally
             for (let y = 0; y < rows; y++) {
+                // Loop X, but allow jumping if we draw big chars
                 for (let x = 0; x < cols; x++) {
                     const idx = (y * cols + x) * 4;
                     const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
@@ -415,32 +388,63 @@
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
+                    // COLOR SELECTION
+                    let fillStyle = config.mainColor;
+                    if (config.colorMode === 4) fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
+                    else if (config.colorMode === 3) fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillStyle = fillStyle;
+
                     if (bright > config.threshold) {
-                        // COLOR LOGIC
-                        if (config.colorMode === 4) {
-                            // NOISE MODE: Random per pixel
-                            ctx.fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
-                        } else if (config.colorMode === 3) {
-                            // REAL MODE
-                            ctx.fillStyle = `rgb(${r},${g},${b})`;
-                        } else {
-                            // MONO MODES
-                            ctx.fillStyle = config.mainColor;
+                        
+                        // CHAOS LOGIC: Determine Density
+                        const rand = Math.random();
+
+                        // 1. MEGA BLOCK (Big Text)
+                        // Requires: Very bright, Space to right and bottom
+                        if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
+                            ctx.font = `bold ${config.gridSize * 2}px monospace`;
+                            const char = denseChars[Math.floor(Math.random() * denseChars.length)];
+                            ctx.fillText(char, posX, posY);
+                            
+                            // Visual flourish: Add a tiny label next to big char
+                            ctx.font = `${config.gridSize/2}px monospace`;
+                            ctx.fillText("ERR", posX + config.gridSize*1.5, posY);
+                            
+                            // Important: Don't skip index, just let it overwrite for chaos look, 
+                            // or simple skip logic could go here but overdrawing looks cooler/glitchier.
+                        } 
+                        
+                        // 2. MICRO CLUSTER (Dense Hex Data)
+                        // Requires: Bright, high randomness
+                        else if (rand > 0.85) {
+                            const subSize = config.gridSize / 2;
+                            ctx.font = `${subSize}px monospace`;
+                            // Draw 2x2 grid
+                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY);
+                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY);
+                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY + subSize);
+                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY + subSize);
                         }
 
-                        const char = denseChars[Math.floor(Math.random() * denseChars.length)];
-                        ctx.fillText(char, posX, posY);
+                        // 3. STANDARD GRID
+                        else {
+                            ctx.font = `${config.gridSize}px monospace`;
+                            const char = denseChars[Math.floor(Math.random() * denseChars.length)];
+                            ctx.fillText(char, posX, posY);
+                        }
+
                     } else {
                         // Passive Dots (Only if no Live BG)
                         if (!config.showLiveBg && Math.random() > 0.95) {
                             ctx.fillStyle = '#333';
+                            ctx.font = `${config.gridSize}px monospace`;
                             ctx.fillText(".", posX, posY);
                         }
                     }
                 }
             }
 
-            // --- TRACKERS ---
+            // Trackers
             if (trackers.length < MAX_TRACKERS && Math.random() > 0.95) {
                 let attempts = 0;
                 while(attempts < 10) {
@@ -462,7 +466,6 @@
             }
         }
 
-        // --- BUTTONS ---
         flipBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
@@ -473,15 +476,13 @@
             e.stopPropagation();
             config.colorMode++;
             if(config.colorMode > 4) config.colorMode = 0;
-
             const labels = ["CLR: WHT", "CLR: YLW", "CLR: GRN", "CLR: SRC", "CLR: RND"];
             colorBtn.innerText = labels[config.colorMode];
-
             if(config.colorMode === 0) updateTheme('#FFFFFF');
             else if(config.colorMode === 1) updateTheme('#eebb00');
             else if(config.colorMode === 2) updateTheme('#00ff41');
-            else if(config.colorMode === 3) updateTheme('#FFFFFF'); // Real
-            else if(config.colorMode === 4) updateTheme('#FFFFFF'); // Noise (UI stays white)
+            else if(config.colorMode === 3) updateTheme('#FFFFFF'); 
+            else if(config.colorMode === 4) updateTheme('#FFFFFF');
         });
 
         bgBtn.addEventListener('click', (e) => {

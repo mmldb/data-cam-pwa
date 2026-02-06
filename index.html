@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V9_CHAOS</title>
+    <title>DATA_DECAY_V10</title>
     <style>
         :root {
             --bg: #050505;
@@ -59,7 +59,7 @@
         .slider-group {
             display: flex;
             flex-direction: column;
-            gap: 30px;
+            gap: 25px;
             margin-top: 20px;
         }
 
@@ -105,9 +105,9 @@
         }
 
         .button-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr; /* 4 Buttons */
+            gap: 5px;
             margin-bottom: 20px;
         }
 
@@ -117,11 +117,12 @@
             color: var(--main);
             font-family: var(--text-font);
             font-weight: bold;
-            font-size: 14px;
+            font-size: 11px; /* Smaller font to fit 4 */
             text-transform: uppercase;
             cursor: pointer;
             text-shadow: 0px 1px 3px rgba(0,0,0,1);
-            padding: 10px;
+            padding: 10px 0;
+            white-space: nowrap;
         }
 
         #start-screen {
@@ -165,14 +166,14 @@
     
     <div id="start-screen">
         <button id="start-btn">INITIALIZE</button>
-        <div class="version">V9.0_CHAOS_GRID</div>
+        <div class="version">V10.0_MODULAR</div>
     </div>
 
     <div id="ui-container">
         <div class="slider-group">
             <div class="slider-row">
                 <span class="label">GRID</span>
-                <input type="range" id="input-grid" min="10" max="50" value="16">
+                <input type="range" id="input-grid" min="6" max="40" value="12">
             </div>
             <div class="slider-row">
                 <span class="label">FPS</span>
@@ -190,6 +191,7 @@
 
         <div class="button-row">
             <button id="flip-btn">FLIP</button>
+            <button id="mode-btn">MOD: GRID</button>
             <button id="color-btn">CLR: WHT</button>
             <button id="bg-btn">BG: OFF</button>
         </div>
@@ -211,15 +213,17 @@
         const inputContrast = document.getElementById('input-contrast');
         
         const flipBtn = document.getElementById('flip-btn');
+        const modeBtn = document.getElementById('mode-btn');
         const colorBtn = document.getElementById('color-btn');
         const bgBtn = document.getElementById('bg-btn');
 
         let config = {
-            gridSize: 16, 
+            gridSize: 12, // Smaller default
             targetFPS: 30,
             fadeAlpha: 0.3, 
             contrast: 20,
             colorMode: 0, 
+            chaosMode: false, // New toggle
             showLiveBg: false,
             threshold: 60,
             facingMode: 'environment',
@@ -229,7 +233,7 @@
         let width, height, stream;
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
-        const microChars = "10.:"; // Chars for dense clusters
+        const microChars = "10.:"; 
 
         // Tracker
         let trackers = [];
@@ -336,7 +340,6 @@
             const xOffset = (width - (vWidth * scale)) / 2;
             const yOffset = (height - (vHeight * scale)) / 2;
 
-            // BG Logic
             if (config.showLiveBg) {
                 ctx.save();
                 if(config.facingMode === 'user') { ctx.translate(width, 0); ctx.scale(-1, 1); }
@@ -352,7 +355,6 @@
                 ctx.fillRect(0, 0, width, height);
             }
 
-            // --- ANALYSIS PASS ---
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
             const tempCanvas = document.createElement('canvas');
@@ -371,12 +373,9 @@
             const contrastFactor = (259 * (config.contrast + 255)) / (255 * (259 - config.contrast));
             const brightnessMap = new Float32Array(cols * rows);
 
-            // --- ADAPTIVE GRID RENDER ---
             ctx.textBaseline = 'top';
 
-            // Loop Y normally
             for (let y = 0; y < rows; y++) {
-                // Loop X, but allow jumping if we draw big chars
                 for (let x = 0; x < cols; x++) {
                     const idx = (y * cols + x) * 4;
                     const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
@@ -388,7 +387,6 @@
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
-                    // COLOR SELECTION
                     let fillStyle = config.mainColor;
                     if (config.colorMode === 4) fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
                     else if (config.colorMode === 3) fillStyle = `rgb(${r},${g},${b})`;
@@ -396,37 +394,27 @@
 
                     if (bright > config.threshold) {
                         
-                        // CHAOS LOGIC: Determine Density
-                        const rand = Math.random();
-
-                        // 1. MEGA BLOCK (Big Text)
-                        // Requires: Very bright, Space to right and bottom
-                        if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
-                            ctx.font = `bold ${config.gridSize * 2}px monospace`;
-                            const char = denseChars[Math.floor(Math.random() * denseChars.length)];
-                            ctx.fillText(char, posX, posY);
-                            
-                            // Visual flourish: Add a tiny label next to big char
-                            ctx.font = `${config.gridSize/2}px monospace`;
-                            ctx.fillText("ERR", posX + config.gridSize*1.5, posY);
-                            
-                            // Important: Don't skip index, just let it overwrite for chaos look, 
-                            // or simple skip logic could go here but overdrawing looks cooler/glitchier.
+                        // --- CHAOS MODE LOGIC ---
+                        if (config.chaosMode) {
+                             const rand = Math.random();
+                             if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
+                                ctx.font = `bold ${config.gridSize * 2}px monospace`;
+                                const char = denseChars[Math.floor(Math.random() * denseChars.length)];
+                                ctx.fillText(char, posX, posY);
+                            } else if (rand > 0.85) {
+                                const subSize = config.gridSize / 2;
+                                ctx.font = `${subSize}px monospace`;
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY + subSize);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY + subSize);
+                            } else {
+                                ctx.font = `${config.gridSize}px monospace`;
+                                const char = denseChars[Math.floor(Math.random() * denseChars.length)];
+                                ctx.fillText(char, posX, posY);
+                            }
                         } 
-                        
-                        // 2. MICRO CLUSTER (Dense Hex Data)
-                        // Requires: Bright, high randomness
-                        else if (rand > 0.85) {
-                            const subSize = config.gridSize / 2;
-                            ctx.font = `${subSize}px monospace`;
-                            // Draw 2x2 grid
-                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY);
-                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY);
-                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY + subSize);
-                            ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY + subSize);
-                        }
-
-                        // 3. STANDARD GRID
+                        // --- STANDARD GRID LOGIC ---
                         else {
                             ctx.font = `${config.gridSize}px monospace`;
                             const char = denseChars[Math.floor(Math.random() * denseChars.length)];
@@ -434,7 +422,6 @@
                         }
 
                     } else {
-                        // Passive Dots (Only if no Live BG)
                         if (!config.showLiveBg && Math.random() > 0.95) {
                             ctx.fillStyle = '#333';
                             ctx.font = `${config.gridSize}px monospace`;
@@ -444,7 +431,6 @@
                 }
             }
 
-            // Trackers
             if (trackers.length < MAX_TRACKERS && Math.random() > 0.95) {
                 let attempts = 0;
                 while(attempts < 10) {
@@ -466,10 +452,18 @@
             }
         }
 
+        // --- EVENTS ---
+
         flipBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
             initCamera();
+        });
+
+        modeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            config.chaosMode = !config.chaosMode;
+            modeBtn.innerText = config.chaosMode ? "MOD: CHAOS" : "MOD: GRID";
         });
 
         colorBtn.addEventListener('click', (e) => {

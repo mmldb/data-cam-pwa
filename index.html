@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V7_ASPECT</title>
+    <title>DATA_DECAY_V8</title>
     <style>
         :root {
             --bg: #050505;
-            --main: #eebb00; 
-            --dim: #443300;
+            --main: #ffffff; /* Default to White */
             --text-font: 'Courier New', Courier, monospace;
         }
 
@@ -23,7 +22,7 @@
             font-family: var(--text-font);
             -webkit-user-select: none;
             user-select: none;
-            touch-action: none; /* Prevents scroll bounce */
+            touch-action: none;
         }
 
         canvas {
@@ -34,7 +33,7 @@
             z-index: 1;
         }
 
-        /* UI Container */
+        /* --- MINIMALIST UI --- */
         #ui-container {
             position: absolute;
             top: 0;
@@ -48,7 +47,7 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 20px;
+            padding: 40px 20px;
             box-sizing: border-box;
         }
 
@@ -57,94 +56,109 @@
             pointer-events: auto;
         }
 
-        /* Sliders Panel */
-        .control-panel {
-            background: rgba(0, 0, 0, 0.85);
-            border: 1px solid var(--main);
-            padding: 20px;
+        /* Floating Sliders (No background box) */
+        .slider-group {
             display: flex;
             flex-direction: column;
-            gap: 25px; /* More space between sliders */
-            backdrop-filter: blur(4px);
+            gap: 30px;
             margin-top: 20px;
         }
 
-        .control-row {
+        .slider-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            color: var(--main);
-            font-size: 14px; /* Larger Text */
-            font-weight: bold;
-        }
-
-        /* IMPROVED SLIDERS (Easier to touch) */
-        input[type=range] {
-            -webkit-appearance: none; /* Hides the slider so that custom slider can be made */
-            width: 55%; /* Specific width is required for Firefox. */
-            background: transparent; /* Otherwise white in Chrome */
-            height: 30px; /* Taller touch area */
-            cursor: pointer;
-        }
-
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 24px;
-            width: 24px;
-            background: var(--main);
-            border: 2px solid #fff;
-            cursor: pointer;
-            margin-top: -10px; /* You need to specify a margin in Chrome, but in Firefox and IE it is automatic */
-            box-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-
-        input[type=range]::-webkit-slider-runnable-track {
             width: 100%;
-            height: 4px;
+            color: var(--main);
+            text-shadow: 0px 1px 3px rgba(0,0,0,0.8); /* Shadow for readability */
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .label {
+            width: 80px;
+            letter-spacing: 1px;
+        }
+
+        /* Custom "Volume" Line Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 20px;
             cursor: pointer;
-            background: #333;
-            border: 1px solid var(--dim);
         }
         
-        input[type=range]:focus {
-            outline: none;
+        input[type=range]:focus { outline: none; }
+
+        /* The Line */
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 2px;
+            cursor: pointer;
+            background: var(--main);
+            box-shadow: 0px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        /* The Thumb (Circle) */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--main);
+            cursor: pointer;
+            margin-top: -7px;
+            box-shadow: 0px 1px 5px rgba(0,0,0,0.5);
         }
 
         /* Bottom Buttons */
-        .button-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 12px;
+        .button-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
             margin-bottom: 20px;
         }
 
         button {
-            background: rgba(0,0,0,0.9);
-            border: 1px solid var(--main);
+            background: transparent;
+            border: none;
             color: var(--main);
-            padding: 15px 0; /* Taller buttons */
             font-family: var(--text-font);
             font-weight: bold;
-            font-size: 12px;
+            font-size: 14px;
             text-transform: uppercase;
             cursor: pointer;
-            white-space: nowrap;
+            text-shadow: 0px 1px 3px rgba(0,0,0,1);
+            padding: 10px;
         }
-
+        
         button.active {
-            background: var(--main);
-            color: var(--bg);
+            text-decoration: underline;
         }
 
+        /* Start Screen */
         #start-screen {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             z-index: 20;
+            text-align: center;
         }
         
-        #start-btn { padding: 20px 40px; font-size: 18px; }
+        #start-btn { 
+            border: 1px solid var(--main); 
+            padding: 15px 30px; 
+            font-size: 16px;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .version {
+            margin-top: 10px;
+            font-size: 10px;
+            color: var(--main);
+            opacity: 0.7;
+        }
 
         .scanline {
             width: 100%;
@@ -162,34 +176,34 @@
     <div class="scanline"></div>
     
     <div id="start-screen">
-        <button id="start-btn">INITIALIZE_SYSTEM</button>
+        <button id="start-btn">INITIALIZE</button>
+        <div class="version">V8.0_BETA</div>
     </div>
 
     <div id="ui-container">
-        <div class="control-panel">
-            <div class="control-row">
-                <label>GRID</label>
+        <div class="slider-group">
+            <div class="slider-row">
+                <span class="label">GRID</span>
                 <input type="range" id="input-grid" min="8" max="40" value="14">
             </div>
-            <div class="control-row">
-                <label>FPS</label>
+            <div class="slider-row">
+                <span class="label">FPS</span>
                 <input type="range" id="input-fps" min="1" max="60" value="30">
             </div>
-            <div class="control-row">
-                <label>DECAY</label>
-                <input type="range" id="input-fade" min="1" max="100" value="40">
+            <div class="slider-row">
+                <span class="label">DECAY</span>
+                <input type="range" id="input-fade" min="0" max="100" value="30">
             </div>
-            <div class="control-row">
-                <label>CONTRAST</label>
+            <div class="slider-row">
+                <span class="label">CONTRAST</span>
                 <input type="range" id="input-contrast" min="0" max="200" value="0">
             </div>
         </div>
 
-        <div class="button-grid">
+        <div class="button-row">
             <button id="flip-btn">FLIP</button>
-            <button id="rnd-btn">RND</button>
-            <button id="real-btn">SRC</button>
-            <button id="bg-btn">BG</button>
+            <button id="color-btn">CLR: WHT</button>
+            <button id="bg-btn">BG: OFF</button>
         </div>
     </div>
 
@@ -203,42 +217,42 @@
         const startBtn = document.getElementById('start-btn');
         const uiContainer = document.getElementById('ui-container');
         
+        // Inputs
         const inputGrid = document.getElementById('input-grid');
         const inputFps = document.getElementById('input-fps');
         const inputFade = document.getElementById('input-fade');
         const inputContrast = document.getElementById('input-contrast');
         
+        // Buttons
         const flipBtn = document.getElementById('flip-btn');
-        const rndBtn = document.getElementById('rnd-btn');
-        const realBtn = document.getElementById('real-btn');
+        const colorBtn = document.getElementById('color-btn');
         const bgBtn = document.getElementById('bg-btn');
 
+        // Config
         let config = {
             gridSize: 14, 
             targetFPS: 30,
-            fadeAlpha: 0.4, 
-            contrast: 0, // Added Contrast
-            colorActive: '#eebb00', 
-            colorPassive: '#332a00', 
-            useRealColors: false,
+            fadeAlpha: 0.3, 
+            contrast: 0,
+            colorMode: 0, // 0=White, 1=Yellow, 2=Green, 3=Real, 4=NOISE
             showLiveBg: false,
-            threshold: 75,
-            facingMode: 'environment'
+            threshold: 70,
+            facingMode: 'environment',
+            mainColor: '#FFFFFF'
         };
 
         let width, height, stream;
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
 
-        // Tracker Class
+        // Tracker
         let trackers = [];
         const MAX_TRACKERS = 3;
 
         class Tracker {
             constructor(gx, gy) {
-                this.gx = gx; 
-                this.gy = gy;
-                this.id = "TRK-" + Math.floor(Math.random() * 999);
+                this.gx = gx; this.gy = gy;
+                this.id = "ID-" + Math.floor(Math.random() * 999);
                 this.life = 60 + Math.random() * 60; 
                 this.active = true;
                 this.mass = 1; 
@@ -247,36 +261,22 @@
             update(data, cols, rows, brightnessMap) {
                 this.life--;
                 if (this.life <= 0) this.active = false;
-
-                let sumX = 0;
-                let sumY = 0;
-                let count = 0;
+                let sumX = 0, sumY = 0, count = 0;
                 const range = 5; 
-                
                 for(let dy = -range; dy <= range; dy++) {
                     for(let dx = -range; dx <= range; dx++) {
                         const nx = Math.floor(this.gx + dx);
                         const ny = Math.floor(this.gy + dy);
-                        
                         if(nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                            // Use brightness map we already calculated
-                            const b = brightnessMap[ny * cols + nx];
-                            if(b > config.threshold) {
-                                sumX += nx;
-                                sumY += ny;
-                                count++;
+                            if(brightnessMap[ny * cols + nx] > config.threshold) {
+                                sumX += nx; sumY += ny; count++;
                             }
                         }
                     }
                 }
-
                 if(count > 0) {
-                    this.gx = sumX / count; 
-                    this.gy = sumY / count;
-                    this.mass = count; 
-                } else {
-                    this.life -= 5; 
-                }
+                    this.gx = sumX / count; this.gy = sumY / count; this.mass = count; 
+                } else { this.life -= 5; }
             }
 
             draw(ctx) {
@@ -284,28 +284,22 @@
                 const screenY = this.gy * config.gridSize;
                 let boxSize = config.gridSize + (this.mass * (config.gridSize * 0.2));
                 if(boxSize > config.gridSize * 10) boxSize = config.gridSize * 10;
-
-                ctx.strokeStyle = config.useRealColors ? '#fff' : config.colorActive;
-                ctx.lineWidth = 2;
+                
+                // Trackers always white or red in noise mode? Let's stick to main color or white
+                ctx.strokeStyle = (config.colorMode === 4) ? '#fff' : config.mainColor;
+                ctx.lineWidth = 1;
                 ctx.strokeRect(screenX - boxSize/2, screenY - boxSize/2, boxSize, boxSize);
-                
-                ctx.fillStyle = config.useRealColors ? '#fff' : config.colorActive;
+                ctx.fillStyle = (config.colorMode === 4) ? '#fff' : config.mainColor;
                 ctx.font = '10px monospace';
-                ctx.fillText(`${this.id}`, screenX + boxSize/2 + 4, screenY - boxSize/2);
-                
-                ctx.beginPath();
-                ctx.moveTo(screenX - 4, screenY);
-                ctx.lineTo(screenX + 4, screenY);
-                ctx.moveTo(screenX, screenY - 4);
-                ctx.lineTo(screenX, screenY + 4);
-                ctx.stroke();
+                ctx.fillText(this.id, screenX + boxSize/2 + 2, screenY - boxSize/2);
             }
         }
 
         function updateTheme(color) {
             document.documentElement.style.setProperty('--main', color);
+            config.mainColor = color;
         }
-        
+
         function resize() {
             width = window.innerWidth;
             height = window.innerHeight;
@@ -315,9 +309,9 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // UI Toggle
+        // Toggle UI
         document.addEventListener('click', (e) => {
-            if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.control-panel')) return;
+            if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.slider-group')) return;
             if(startBtn.style.display === 'none') {
                 uiContainer.classList.toggle('visible');
             }
@@ -326,13 +320,8 @@
         async function initCamera() {
             if (stream) stream.getTracks().forEach(track => track.stop());
             try {
-                // We ask for a high resolution to ensure we have enough data for scaling
                 stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: config.facingMode,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }, 
+                    video: { facingMode: config.facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }, 
                     audio: false 
                 });
                 video.srcObject = stream;
@@ -352,75 +341,64 @@
             if (time - lastTime < interval) return;
             lastTime = time;
 
-            // Update inputs
+            // Read Inputs
             config.gridSize = parseInt(inputGrid.value);
             config.targetFPS = parseInt(inputFps.value);
             config.fadeAlpha = parseInt(inputFade.value) / 100;
-            config.contrast = parseInt(inputContrast.value); // 0 to 200
+            config.contrast = parseInt(inputContrast.value);
 
-            // Aspect Ratio Calculation (Cover Logic)
+            // Aspect Ratio
             const vWidth = video.videoWidth;
             const vHeight = video.videoHeight;
-            if (vWidth === 0) return; // Video not ready
+            if (vWidth === 0) return;
 
             const scale = Math.max(width / vWidth, height / vHeight);
             const xOffset = (width - (vWidth * scale)) / 2;
             const yOffset = (height - (vHeight * scale)) / 2;
 
-            // --- 1. Background (Raw Video) ---
+            // --- BACKGROUND LOGIC ---
             if (config.showLiveBg) {
+                // DRAW VIDEO
                 ctx.save();
-                if(config.facingMode === 'user') {
-                    ctx.translate(width, 0);
-                    ctx.scale(-1, 1);
-                }
-                // Draw properly scaled video
+                if(config.facingMode === 'user') { ctx.translate(width, 0); ctx.scale(-1, 1); }
                 ctx.drawImage(video, xOffset, yOffset, vWidth * scale, vHeight * scale);
                 ctx.restore();
                 
-                const dimAlpha = 0.2 + (config.fadeAlpha * 0.7); 
-                ctx.fillStyle = `rgba(0, 0, 0, ${dimAlpha})`;
+                // DRAW DIMMER (Controlled by Decay Slider)
+                // If Slider is 0 -> 0% Dim. If Slider is 100 -> 80% Dim.
+                const dimVal = config.fadeAlpha * 0.9; 
+                ctx.fillStyle = `rgba(0, 0, 0, ${dimVal})`;
                 ctx.fillRect(0, 0, width, height);
             } else {
-                ctx.fillStyle = `rgba(5, 5, 5, ${config.fadeAlpha})`;
+                // NORMAL TRAIL EFFECT
+                // If slider is 100 -> Alpha 1.0 (Instant clear, no trails)
+                // If slider is 0 -> Alpha 0.0 (Infinite trails)
+                // We map slider 0-100 to alpha 0.05-0.5 for better usability
+                // Let's stick to direct mapping but clamped
+                let trailAlpha = config.fadeAlpha;
+                if(trailAlpha < 0.05) trailAlpha = 0.05; 
+                ctx.fillStyle = `rgba(5, 5, 5, ${trailAlpha})`;
                 ctx.fillRect(0, 0, width, height);
             }
 
-            // --- 2. Data Processing ---
-            // Create a small temp canvas for grid analysis that MATCHES the cropped aspect ratio
+            // --- DATA GRID ---
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
-            
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             tempCanvas.width = cols;
             tempCanvas.height = rows;
 
-            // We must draw the video into this tiny grid canvas using the SAME aspect logic
-            // but scaled down to col/row size
             const gridScale = Math.max(cols / vWidth, rows / vHeight);
             const gridXOff = (cols - (vWidth * gridScale)) / 2;
             const gridYOff = (rows - (vHeight * gridScale)) / 2;
 
-            if (config.facingMode === 'user') {
-                tempCtx.translate(cols, 0);
-                tempCtx.scale(-1, 1);
-            }
-
+            if (config.facingMode === 'user') { tempCtx.translate(cols, 0); tempCtx.scale(-1, 1); }
             tempCtx.drawImage(video, gridXOff, gridYOff, vWidth * gridScale, vHeight * gridScale);
-            
-            const frame = tempCtx.getImageData(0, 0, cols, rows);
-            const data = frame.data;
+            const data = tempCtx.getImageData(0, 0, cols, rows).data;
 
-            // Pre-calculate contrast factor
-            // Formula: factor = (259 * (contrast + 255)) / (255 * (259 - contrast))
-            // Input contrast is 0-200. We map it to -128 to 128 roughly for the formula
-            const cInput = config.contrast; // 0 to 200
-            // Map 0-200 to standard contrast range. Let's act like 0 is normal, 200 is high.
-            // Actually, let's just use a simple multiplier for brightness difference
-            const contrastFactor = (259 * (cInput + 255)) / (255 * (259 - cInput));
-
-            const brightnessMap = new Float32Array(cols * rows); // Store for trackers
+            const contrastFactor = (259 * (config.contrast + 255)) / (255 * (259 - config.contrast));
+            const brightnessMap = new Float32Array(cols * rows);
 
             ctx.font = `${config.gridSize}px monospace`;
             ctx.textBaseline = 'top';
@@ -428,40 +406,41 @@
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const idx = (y * cols + x) * 4;
-                    const r = data[idx];
-                    const g = data[idx+1];
-                    const b = data[idx+2];
+                    const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
                     
-                    // Standard Brightness
                     let bright = (r + g + b) / 3;
-
-                    // Apply Contrast
-                    // NewValue = Factor * (OldValue - 128) + 128
-                    if (config.contrast > 0) {
-                        bright = contrastFactor * (bright - 128) + 128;
-                    }
-
+                    if (config.contrast > 0) bright = contrastFactor * (bright - 128) + 128;
                     brightnessMap[y * cols + x] = bright;
 
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
                     if (bright > config.threshold) {
-                        if (config.useRealColors) ctx.fillStyle = `rgb(${r},${g},${b})`;
-                        else ctx.fillStyle = config.colorActive;
-                        
+                        // COLOR LOGIC
+                        if (config.colorMode === 4) {
+                            // NOISE MODE: Random per pixel
+                            ctx.fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
+                        } else if (config.colorMode === 3) {
+                            // REAL MODE
+                            ctx.fillStyle = `rgb(${r},${g},${b})`;
+                        } else {
+                            // MONO MODES
+                            ctx.fillStyle = config.mainColor;
+                        }
+
                         const char = denseChars[Math.floor(Math.random() * denseChars.length)];
                         ctx.fillText(char, posX, posY);
                     } else {
-                        if (!config.showLiveBg && Math.random() > 0.92) {
-                            ctx.fillStyle = config.colorPassive;
+                        // Passive Dots (Only if no Live BG)
+                        if (!config.showLiveBg && Math.random() > 0.95) {
+                            ctx.fillStyle = '#333';
                             ctx.fillText(".", posX, posY);
                         }
                     }
                 }
             }
 
-            // --- 3. Trackers ---
+            // --- TRACKERS ---
             if (trackers.length < MAX_TRACKERS && Math.random() > 0.95) {
                 let attempts = 0;
                 while(attempts < 10) {
@@ -481,64 +460,37 @@
                 t.draw(ctx);
                 if (!t.active) trackers.splice(i, 1);
             }
-
-            // --- 4. Popups ---
-            if (Math.random() > 0.92) { 
-                const rx = Math.floor(Math.random() * cols);
-                const ry = Math.floor(Math.random() * rows);
-                const idx = (ry * cols + rx) * 4;
-                const screenX = rx * config.gridSize;
-                const screenY = ry * config.gridSize;
-                
-                let overlap = false;
-                trackers.forEach(t => {
-                   if(Math.abs(t.gx - rx) < 5 && Math.abs(t.gy - ry) < 5) overlap = true;
-                });
-
-                if(!overlap && brightnessMap[ry*cols+rx] > 20) { // Only show if visible
-                    const rVal = data[idx];
-                    const txt = `x${rVal.toString(16)}`;
-                    ctx.fillStyle = config.showLiveBg ? '#fff' : '#aaa'; 
-                    ctx.font = `bold 10px monospace`;
-                    ctx.fillText(txt, screenX, screenY);
-                }
-            }
         }
 
-        inputGrid.addEventListener('input', (e) => {});
-        inputFps.addEventListener('input', (e) => {});
-        inputFade.addEventListener('input', (e) => {});
-
-        startBtn.addEventListener('click', initCamera);
-        
+        // --- BUTTONS ---
         flipBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
             initCamera();
         });
 
-        rndBtn.addEventListener('click', (e) => {
+        colorBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            config.useRealColors = false;
-            realBtn.classList.remove('active');
-            const h = Math.floor(Math.random() * 360);
-            const color = `hsl(${h}, 100%, 50%)`;
-            config.colorActive = color;
-            updateTheme(color);
-        });
+            config.colorMode++;
+            if(config.colorMode > 4) config.colorMode = 0;
 
-        realBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            config.useRealColors = !config.useRealColors;
-            realBtn.classList.toggle('active', config.useRealColors);
-            updateTheme(config.useRealColors ? '#ffffff' : config.colorActive);
+            const labels = ["CLR: WHT", "CLR: YLW", "CLR: GRN", "CLR: SRC", "CLR: RND"];
+            colorBtn.innerText = labels[config.colorMode];
+
+            if(config.colorMode === 0) updateTheme('#FFFFFF');
+            else if(config.colorMode === 1) updateTheme('#eebb00');
+            else if(config.colorMode === 2) updateTheme('#00ff41');
+            else if(config.colorMode === 3) updateTheme('#FFFFFF'); // Real
+            else if(config.colorMode === 4) updateTheme('#FFFFFF'); // Noise (UI stays white)
         });
 
         bgBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.showLiveBg = !config.showLiveBg;
-            bgBtn.classList.toggle('active', config.showLiveBg);
+            bgBtn.innerText = config.showLiveBg ? "BG: ON" : "BG: OFF";
         });
+
+        startBtn.addEventListener('click', initCamera);
 
     </script>
 </body>

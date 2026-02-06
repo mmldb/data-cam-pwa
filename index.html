@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V4</title>
+    <title>DATA_DECAY_V5_TRACKER</title>
     <style>
         :root {
             --bg: #050505;
@@ -127,11 +127,6 @@
             background: var(--main);
             color: var(--bg);
         }
-        
-        button:active {
-            background: #fff;
-            color: #000;
-        }
 
         /* Start Button */
         #start-screen {
@@ -164,7 +159,6 @@
     </div>
 
     <div id="ui-container">
-        
         <div class="control-panel">
             <div class="control-row">
                 <label>GRID: <span id="val-grid">14</span>px</label>
@@ -205,31 +199,15 @@
         const valFps = document.getElementById('val-fps');
         const valFade = document.getElementById('val-fade');
         
-        // Buttons
         const flipBtn = document.getElementById('flip-btn');
         const rndBtn = document.getElementById('rnd-btn');
         const realBtn = document.getElementById('real-btn');
-
-        // PWA Manifest
-        const manifest = {
-            "name": "DataDecay",
-            "short_name": "Decay",
-            "start_url": ".",
-            "display": "standalone",
-            "background_color": "#000000",
-            "theme_color": "#000000",
-            "icons": [{"src": "https://placehold.co/192x192/000000/eebb00?text=DATA", "sizes": "192x192", "type": "image/png"}]
-        };
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = 'data:application/json;base64,' + btoa(JSON.stringify(manifest));
-        document.head.appendChild(link);
 
         // App Config
         let config = {
             gridSize: 14, 
             targetFPS: 30,
-            fadeAlpha: 0.4, // Controlled by DECAY slider
+            fadeAlpha: 0.4, 
             colorActive: '#eebb00', 
             colorPassive: '#332a00', 
             useRealColors: false,
@@ -241,7 +219,93 @@
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
 
-        // Update Theme Color in CSS variable for UI consistency
+        // TRACKER SYSTEM
+        let trackers = [];
+        const MAX_TRACKERS = 3;
+
+        class Tracker {
+            constructor(gx, gy) {
+                this.gx = gx; // Grid Coordinates
+                this.gy = gy;
+                this.id = "T-" + Math.floor(Math.random() * 999);
+                this.life = 60 + Math.random() * 60; // How many frames it lives
+                this.maxLife = this.life;
+                this.active = true;
+                this.angle = 0;
+            }
+
+            update(data, cols, rows) {
+                this.life--;
+                this.angle += 0.1;
+                if (this.life <= 0) this.active = false;
+
+                // Simple "Center of Brightness" tracking in a 5x5 grid area
+                // This makes the tracker "stick" to moving bright objects
+                let sumX = 0;
+                let sumY = 0;
+                let count = 0;
+                
+                const range = 4; // look 4 cells around
+                
+                for(let dy = -range; dy <= range; dy++) {
+                    for(let dx = -range; dx <= range; dx++) {
+                        const nx = Math.floor(this.gx + dx);
+                        const ny = Math.floor(this.gy + dy);
+                        
+                        if(nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                            const idx = (ny * cols + nx) * 4;
+                            const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+                            if(brightness > config.threshold) {
+                                sumX += nx;
+                                sumY += ny;
+                                count++;
+                            }
+                        }
+                    }
+                }
+
+                if(count > 0) {
+                    // Move towards the center of brightness (Ease out)
+                    const targetX = sumX / count;
+                    const targetY = sumY / count;
+                    this.gx += (targetX - this.gx) * 0.2;
+                    this.gy += (targetY - this.gy) * 0.2;
+                }
+            }
+
+            draw(ctx) {
+                const screenX = this.gx * config.gridSize;
+                const screenY = this.gy * config.gridSize;
+                const size = config.gridSize * 3; // Size of the reticle
+
+                ctx.strokeStyle = config.useRealColors ? '#fff' : config.colorActive;
+                ctx.lineWidth = 2;
+                
+                // Draw rotating broken circle
+                ctx.save();
+                ctx.translate(screenX, screenY);
+                ctx.rotate(this.angle);
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, size, 0, Math.PI * 0.5);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, size, Math.PI, Math.PI * 1.5);
+                ctx.stroke();
+                
+                ctx.restore();
+
+                // Draw Label
+                ctx.fillStyle = config.useRealColors ? '#fff' : config.colorActive;
+                ctx.font = '10px monospace';
+                ctx.fillText(`${this.id} [${Math.floor(this.life)}]`, screenX + size + 5, screenY);
+                
+                // Draw Center Dot
+                ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
+            }
+        }
+
         function updateTheme(color) {
             document.documentElement.style.setProperty('--main', color);
         }
@@ -255,7 +319,6 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Interaction: Tap to toggle UI
         document.addEventListener('click', (e) => {
             if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.control-panel')) return;
             if(startBtn.style.display === 'none') {
@@ -287,12 +350,10 @@
             if (time - lastTime < interval) return;
             lastTime = time;
 
-            // Sync Sliders
             config.gridSize = parseInt(inputGrid.value);
             config.targetFPS = parseInt(inputFps.value);
             config.fadeAlpha = parseInt(inputFade.value) / 100;
 
-            // Prepare Processing Canvas
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             const cols = Math.floor(width / config.gridSize);
@@ -308,15 +369,14 @@
             const frame = tempCtx.getImageData(0, 0, cols, rows);
             const data = frame.data;
 
-            // Draw Background (The Fade Effect)
-            // We use standard black, but vary the Alpha based on the slider
+            // Background Fade
             ctx.fillStyle = `rgba(5, 5, 5, ${config.fadeAlpha})`;
             ctx.fillRect(0, 0, width, height);
             
             ctx.font = `${config.gridSize}px monospace`;
             ctx.textBaseline = 'top';
 
-            // Draw Grid
+            // 1. DRAW GRID
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const idx = (y * cols + x) * 4;
@@ -328,18 +388,11 @@
                     const posY = y * config.gridSize;
 
                     if (brightness > config.threshold) {
-                        // Color Determination
-                        if (config.useRealColors) {
-                            ctx.fillStyle = `rgb(${r},${g},${b})`;
-                        } else {
-                            ctx.fillStyle = config.colorActive;
-                        }
-
-                        // Draw Character
+                        if (config.useRealColors) ctx.fillStyle = `rgb(${r},${g},${b})`;
+                        else ctx.fillStyle = config.colorActive;
                         const char = denseChars[Math.floor(Math.random() * denseChars.length)];
                         ctx.fillText(char, posX, posY);
                     } else {
-                        // Passive Grid
                         if (Math.random() > 0.92) {
                             ctx.fillStyle = config.colorPassive;
                             ctx.fillText(".", posX, posY);
@@ -348,38 +401,57 @@
                 }
             }
 
-            // Real Data Popups
-            if (Math.random() > 0.90) { 
+            // 2. MANAGE TRACKERS
+            // Randomly spawn new tracker
+            if (trackers.length < MAX_TRACKERS && Math.random() > 0.95) {
+                // Find a random bright spot to start
+                let attempts = 0;
+                while(attempts < 10) {
+                    const rx = Math.floor(Math.random() * cols);
+                    const ry = Math.floor(Math.random() * rows);
+                    const idx = (ry * cols + rx) * 4;
+                    const b = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+                    
+                    if (b > config.threshold) {
+                        trackers.push(new Tracker(rx, ry));
+                        break;
+                    }
+                    attempts++;
+                }
+            }
+
+            // Update and Draw Trackers
+            for (let i = trackers.length - 1; i >= 0; i--) {
+                const t = trackers[i];
+                t.update(data, cols, rows);
+                t.draw(ctx);
+                if (!t.active) trackers.splice(i, 1);
+            }
+
+            // 3. STATIC POPUPS (The old data overlay)
+            if (Math.random() > 0.92) { 
                 const rx = Math.floor(Math.random() * cols);
                 const ry = Math.floor(Math.random() * rows);
-                const rIdx = (ry * cols + rx) * 4;
-                const rVal = data[rIdx];
-                const gVal = data[rIdx+1];
-                const bVal = data[rIdx+2];
+                const idx = (ry * cols + rx) * 4;
                 const screenX = rx * config.gridSize;
                 const screenY = ry * config.gridSize;
-
-                const dataTypes = [
-                    `RGB[${rVal},${gVal},${bVal}]`,
-                    `X:${screenX} Y:${screenY}`,
-                    `HEX:#${rVal.toString(16).padStart(2,'0')}${gVal.toString(16).padStart(2,'0')}${bVal.toString(16).padStart(2,'0')}`
-                ];
                 
-                // Color for popup lines
-                ctx.strokeStyle = config.useRealColors ? '#ffffff' : config.colorActive;
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(screenX, screenY);
-                ctx.lineTo(screenX + 20, screenY - 20);
-                ctx.stroke();
+                // Don't draw popup if it overlaps a tracker (simple check)
+                let overlap = false;
+                trackers.forEach(t => {
+                   if(Math.abs(t.gx - rx) < 5 && Math.abs(t.gy - ry) < 5) overlap = true;
+                });
 
-                ctx.fillStyle = '#ffffff';
-                ctx.font = `bold 12px monospace`;
-                ctx.fillText(dataTypes[Math.floor(Math.random() * dataTypes.length)], screenX + 22, screenY - 30);
+                if(!overlap) {
+                    const rVal = data[idx];
+                    const txt = `HEX:#${rVal.toString(16).padStart(2,'0')}..`;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `bold 10px monospace`;
+                    ctx.fillText(txt, screenX, screenY);
+                }
             }
         }
 
-        // Listeners for Sliders (Update labels)
         inputGrid.addEventListener('input', (e) => valGrid.innerText = e.target.value);
         inputFps.addEventListener('input', (e) => valFps.innerText = e.target.value);
         inputFade.addEventListener('input', (e) => valFade.innerText = e.target.value);
@@ -392,33 +464,25 @@
             initCamera();
         });
 
-        // Random Color Generator
         rndBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.useRealColors = false;
             realBtn.classList.remove('active');
-            
-            // Generate random bright color
             const h = Math.floor(Math.random() * 360);
             const color = `hsl(${h}, 100%, 50%)`;
-            
             config.colorActive = color;
-            config.colorPassive = '#222'; // Reset passive to neutral
-            
-            updateTheme(color); // Update UI color
+            updateTheme(color);
         });
 
-        // Real Color Toggle
         realBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.useRealColors = !config.useRealColors;
-            
             if(config.useRealColors) {
                 realBtn.classList.add('active');
-                updateTheme('#ffffff'); // Set UI to white for neutrality
+                updateTheme('#ffffff');
             } else {
                 realBtn.classList.remove('active');
-                updateTheme(config.colorActive); // Revert to active color
+                updateTheme(config.colorActive);
             }
         });
 

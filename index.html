@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V13_SURVEILLANCE</title>
+    <title>DATA_DECAY_V14_SWARM</title>
     <style>
         :root {
             --bg: #050505;
@@ -133,7 +133,7 @@
         
         .button-row-2 {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr; /* Changed to 3 cols for TXT btn */
             gap: 8px;
         }
 
@@ -195,7 +195,7 @@
     
     <div id="start-screen">
         <button id="start-btn">INITIALIZE</button>
-        <div class="version">V13.0_SURVEILLANCE</div>
+        <div class="version">V14.0_SWARM</div>
     </div>
 
     <div id="ui-container">
@@ -221,7 +221,7 @@
             </div>
             <div class="slider-row">
                 <span class="label">TRK</span>
-                <input type="range" id="input-trk" min="0" max="50" value="3">
+                <input type="range" id="input-trk" min="0" max="150" value="5">
             </div>
         </div>
 
@@ -234,6 +234,7 @@
             </div>
             <div class="button-row-2">
                 <button id="bg-btn">BG: OFF</button>
+                <button id="txt-btn">TXT: ON</button>
                 <button id="snap-btn">SNAP</button>
             </div>
         </div>
@@ -262,21 +263,22 @@
         const invBtn = document.getElementById('inv-btn');
         const bgBtn = document.getElementById('bg-btn');
         const snapBtn = document.getElementById('snap-btn');
+        const txtBtn = document.getElementById('txt-btn');
 
         let config = {
             gridSize: 12,
             targetFPS: 30,
             fadeAlpha: 0.3, 
             fxLevel: 0,
-            maxTrackers: 3,
-            colorMode: 0, // 0:Wht, 1:Ylw, 2:Grn, 3:Src, 4:Rnd, 5:HEAT
+            maxTrackers: 5,
+            colorMode: 0, 
             chaosMode: false, 
             isInverted: false,
             showLiveBg: false,
+            showText: true, // Master toggle for ASCII
             threshold: 60,
             facingMode: 'environment',
             mainColor: '#FFFFFF',
-            bgColor: '#050505',
         };
 
         let width, height, stream;
@@ -291,8 +293,8 @@
         class Tracker {
             constructor(gx, gy) {
                 this.gx = gx; this.gy = gy;
-                this.id = "ID-" + Math.floor(Math.random() * 999);
-                this.life = 60 + Math.random() * 60; 
+                this.id = "T-" + Math.floor(Math.random() * 99); // Short ID
+                this.life = 30 + Math.random() * 60; 
                 this.active = true;
                 this.mass = 1; 
             }
@@ -300,7 +302,6 @@
                 this.life--;
                 if (this.life <= 0) this.active = false;
                 let sumX = 0, sumY = 0, count = 0;
-                // Smaller scan range for performance with high tracker count
                 const range = 3; 
                 for(let dy = -range; dy <= range; dy++) {
                     for(let dx = -range; dx <= range; dx++) {
@@ -324,7 +325,7 @@
                 if(boxSize > config.gridSize * 10) boxSize = config.gridSize * 10;
                 
                 let stroke = config.mainColor;
-                if(config.colorMode === 5) stroke = '#FF0000'; // Red for Heat trackers
+                if(config.colorMode === 5) stroke = '#FF0000'; 
                 if(config.isInverted && config.colorMode === 0) stroke = '#000000';
                 
                 ctx.strokeStyle = stroke;
@@ -339,11 +340,18 @@
 
                 ctx.strokeRect(screenX - boxSize/2 + jx, screenY - boxSize/2 + jy, boxSize, boxSize);
                 
-                // Only draw text labels if tracker count is low to avoid clutter
-                if (config.maxTrackers < 10) {
+                // INTELLIGENT TEXT: 
+                // Only show text if tracker count is low OR if this specific tracker is "big" (mass > 5)
+                // This prevents the screen from becoming a solid block of text at 150 trackers.
+                if (config.maxTrackers < 20 || this.mass > 5) {
                     ctx.fillStyle = stroke;
-                    ctx.font = '10px monospace';
-                    ctx.fillText(this.id, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy);
+                    ctx.font = '9px monospace';
+                    ctx.fillText(`${this.id}`, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy);
+                    
+                    // Add coords sometimes
+                    if (this.mass > 8) {
+                         ctx.fillText(`[${Math.floor(this.gx)},${Math.floor(this.gy)}]`, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy + 10);
+                    }
                 }
             }
         }
@@ -412,50 +420,33 @@
 
             const scale = Math.max(width / vWidth, height / vHeight);
             
-            // --- 1. BACKGROUND LAYER ---
-            
-            // If Inverted is ON, we want a White Background by default
-            // If Inverted is OFF, Black Background
+            // --- 1. BACKGROUND ---
             const baseBg = config.isInverted ? '#ffffff' : '#050505';
 
             if (config.showLiveBg) {
-                // CLEAR CANVAS
                 ctx.fillStyle = baseBg;
                 ctx.fillRect(0, 0, width, height);
-
-                // DRAW VIDEO
                 ctx.save();
                 if(config.facingMode === 'user') { ctx.translate(width, 0); ctx.scale(-1, 1); }
                 const xOffset = (width - (vWidth * scale)) / 2;
                 const yOffset = (height - (vHeight * scale)) / 2;
-                
-                // If Inverted, we can invert the video context for Negative Film effect
-                if (config.isInverted) {
-                    ctx.filter = 'invert(1)';
-                }
+                if (config.isInverted) ctx.filter = 'invert(1)';
                 ctx.drawImage(video, xOffset, yOffset, vWidth * scale, vHeight * scale);
-                ctx.filter = 'none'; // reset
+                ctx.filter = 'none';
                 ctx.restore();
-
-                // DRAW DIMMER (Controlled by Decay Slider)
-                // When BG is ON, Decay = Dimness
                 const dimColor = config.isInverted ? `rgba(255,255,255,${config.fadeAlpha})` : `rgba(0,0,0,${config.fadeAlpha})`;
                 ctx.fillStyle = dimColor;
                 ctx.fillRect(0, 0, width, height);
-
             } else {
-                // NORMAL TRAIL EFFECT
-                // When BG is OFF, Decay = Trails
                 let trailVal = config.fadeAlpha;
                 if(trailVal < 0.05) trailVal = 0.05;
-                
                 const trailColor = config.isInverted ? `rgba(255,255,255,${trailVal})` : `rgba(5,5,5,${trailVal})`;
                 ctx.fillStyle = trailColor;
                 ctx.fillRect(0, 0, width, height);
             }
 
 
-            // --- 2. GRID PROCESSING ---
+            // --- 2. GRID & TRACKER PREP ---
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
             const tempCanvas = document.createElement('canvas');
@@ -475,115 +466,109 @@
 
             ctx.textBaseline = 'top';
 
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                    const idx = (y * cols + x) * 4;
-                    const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
-                    
-                    let bright = (r + g + b) / 3;
-                    
-                    // Simple Contrast boost manually (since we removed slider)
-                    // bright = 1.2 * (bright - 128) + 128; 
-                    
-                    brightnessMap[y * cols + x] = bright;
-
-                    const posX = x * config.gridSize;
-                    const posY = y * config.gridSize;
-
-                    // --- COLOR LOGIC ---
-                    let fillStyle;
-                    if (config.colorMode === 5) { // HEATMAP
-                        // Map brightness to Heat Gradient (Blue -> Green -> Red)
-                        const hue = (1 - (bright / 255)) * 240; // 240(blue) to 0(red)
-                        fillStyle = `hsl(${hue}, 100%, 50%)`;
-                    } else if (config.isInverted && config.colorMode === 0) {
-                        fillStyle = '#000000';
-                    } else if (config.colorMode === 4) { // RND
-                        fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
-                    } else if (config.colorMode === 3) { // SRC
-                        fillStyle = `rgb(${r},${g},${b})`;
-                    } else {
-                        fillStyle = config.mainColor;
-                    }
-                    
-                    ctx.fillStyle = fillStyle;
-
-                    if (bright > config.threshold) {
+            // --- 3. RENDER TEXT GRID (ONLY IF SHOWTEXT IS TRUE) ---
+            if (config.showText) {
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
+                        const idx = (y * cols + x) * 4;
+                        const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
+                        let bright = (r + g + b) / 3;
+                        brightnessMap[y * cols + x] = bright; // Store for trackers even if text hidden? No, need loop for trackers separately if text is off?
+                        // Actually, we need to populate brightnessMap regardless.
                         
-                        // Glitch offsets
-                        let finalX = posX;
-                        let finalY = posY;
-                        let isGlitching = false;
+                        const posX = x * config.gridSize;
+                        const posY = y * config.gridSize;
 
-                        if (config.fxLevel > 0) {
-                            if (Math.random() < (config.fxLevel / 200)) {
+                        // COLOR
+                        let fillStyle;
+                        if (config.colorMode === 5) { 
+                            const hue = (1 - (bright / 255)) * 240; 
+                            fillStyle = `hsl(${hue}, 100%, 50%)`;
+                        } else if (config.isInverted && config.colorMode === 0) {
+                            fillStyle = '#000000';
+                        } else if (config.colorMode === 4) { 
+                            fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
+                        } else if (config.colorMode === 3) { 
+                            fillStyle = `rgb(${r},${g},${b})`;
+                        } else {
+                            fillStyle = config.mainColor;
+                        }
+                        ctx.fillStyle = fillStyle;
+
+                        if (bright > config.threshold) {
+                            // Glitch
+                            let finalX = posX;
+                            let finalY = posY;
+                            let isGlitching = false;
+                            if (config.fxLevel > 0 && Math.random() < (config.fxLevel / 200)) {
                                 isGlitching = true;
                                 const shake = (config.fxLevel / 8);
                                 finalX += (Math.random() - 0.5) * shake;
                                 finalY += (Math.random() - 0.5) * shake;
-                                
                                 if (config.fxLevel > 50) {
-                                    ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
-                                    ctx.fillText("▒", finalX + 2, finalY);
-                                    ctx.fillStyle = 'rgba(0, 0, 255, 0.7)';
-                                    ctx.fillText("▒", finalX - 2, finalY);
+                                    ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; ctx.fillText("▒", finalX + 2, finalY);
+                                    ctx.fillStyle = 'rgba(0, 0, 255, 0.7)'; ctx.fillText("▒", finalX - 2, finalY);
                                     ctx.fillStyle = fillStyle; 
                                 }
                             }
-                        }
 
-                        // Character Render
-                        if (config.chaosMode || isGlitching) {
-                             const rand = Math.random();
-                             if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
-                                ctx.font = `bold ${config.gridSize * 2}px monospace`;
-                                const char = (customTxt.length > 0) ? useChars[Math.floor(time/100) % useChars.length] : useChars[Math.floor(Math.random() * useChars.length)];
-                                ctx.fillText(char, finalX, finalY);
-                            } else if (rand > 0.85 && customTxt.length === 0) { 
-                                const subSize = config.gridSize / 2;
-                                ctx.font = `${subSize}px monospace`;
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX, finalY);
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX + subSize, finalY);
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX, finalY + subSize);
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX + subSize, finalY + subSize);
+                            // Render Char
+                            if (config.chaosMode || isGlitching) {
+                                const rand = Math.random();
+                                if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
+                                    ctx.font = `bold ${config.gridSize * 2}px monospace`;
+                                    const char = (customTxt.length > 0) ? useChars[Math.floor(time/100) % useChars.length] : useChars[Math.floor(Math.random() * useChars.length)];
+                                    ctx.fillText(char, finalX, finalY);
+                                } else if (rand > 0.85 && customTxt.length === 0) { 
+                                    const subSize = config.gridSize / 2;
+                                    ctx.font = `${subSize}px monospace`;
+                                    ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX, finalY);
+                                    ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX + subSize, finalY);
+                                    ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX, finalY + subSize);
+                                    ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX + subSize, finalY + subSize);
+                                } else {
+                                    ctx.font = `${config.gridSize}px monospace`;
+                                    const char = useChars[Math.floor(Math.random() * useChars.length)];
+                                    ctx.fillText(char, finalX, finalY);
+                                }
                             } else {
                                 ctx.font = `${config.gridSize}px monospace`;
-                                const char = useChars[Math.floor(Math.random() * useChars.length)];
+                                let char;
+                                if (customTxt.length > 0) {
+                                    const charIdx = (x + y) % useChars.length;
+                                    char = useChars[charIdx];
+                                } else {
+                                    char = useChars[Math.floor(Math.random() * useChars.length)];
+                                }
                                 ctx.fillText(char, finalX, finalY);
                             }
                         } else {
-                            ctx.font = `${config.gridSize}px monospace`;
-                            let char;
-                            if (customTxt.length > 0) {
-                                const charIdx = (x + y) % useChars.length;
-                                char = useChars[charIdx];
-                            } else {
-                                char = useChars[Math.floor(Math.random() * useChars.length)];
+                            if (!config.showLiveBg && Math.random() > 0.95) {
+                                ctx.fillStyle = config.isInverted ? '#ccc' : '#333';
+                                ctx.font = `${config.gridSize}px monospace`;
+                                ctx.fillText(".", posX, posY);
                             }
-                            ctx.fillText(char, finalX, finalY);
-                        }
-
-                    } else {
-                        // Passive Dots (Hide in Live BG mode to keep video clear)
-                        if (!config.showLiveBg && Math.random() > 0.95) {
-                            ctx.fillStyle = config.isInverted ? '#ccc' : '#333';
-                            ctx.font = `${config.gridSize}px monospace`;
-                            ctx.fillText(".", posX, posY);
                         }
                     }
                 }
+            } else {
+                // TEXT OFF MODE: We still need brightnessMap for trackers
+                for (let i = 0; i < cols * rows; i++) {
+                    const idx = i * 4;
+                    brightnessMap[i] = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+                }
             }
 
-            // --- 3. TRACKER SPAWNER ---
-            // Remove inactive
+            // --- 4. TRACKERS ---
+            // Cleanup
             for (let i = trackers.length - 1; i >= 0; i--) {
                 if (!trackers[i].active) trackers.splice(i, 1);
             }
-            
-            // Spawn new if under limit
-            if (trackers.length < config.maxTrackers && Math.random() > 0.8) {
+            // Spawn (Higher rate if max is high)
+            const spawnRate = config.maxTrackers > 20 ? 0.5 : 0.8;
+            if (trackers.length < config.maxTrackers && Math.random() > spawnRate) {
                 let attempts = 0;
-                while(attempts < 10) {
+                while(attempts < 15) {
                     const rx = Math.floor(Math.random() * cols);
                     const ry = Math.floor(Math.random() * rows);
                     if (brightnessMap[ry * cols + rx] > config.threshold) {
@@ -593,12 +578,10 @@
                     attempts++;
                 }
             }
-            // Trim if over limit (user slid slider down)
             if (trackers.length > config.maxTrackers) {
                 trackers.splice(0, trackers.length - config.maxTrackers);
             }
-
-            // Draw Trackers
+            // Draw
             for (let i = trackers.length - 1; i >= 0; i--) {
                 const t = trackers[i];
                 t.update(data, cols, rows, brightnessMap);
@@ -634,16 +617,12 @@
             if(config.colorMode > 5) config.colorMode = 0;
             const labels = ["CLR: WHT", "CLR: YLW", "CLR: GRN", "CLR: SRC", "CLR: RND", "CLR: HEAT"];
             colorBtn.innerText = labels[config.colorMode];
-            
-            // Set Main Theme Color
             if(config.colorMode === 0) updateTheme('#FFFFFF');
             else if(config.colorMode === 1) updateTheme('#eebb00');
             else if(config.colorMode === 2) updateTheme('#00ff41');
             else if(config.colorMode === 3) updateTheme('#FFFFFF'); 
             else if(config.colorMode === 4) updateTheme('#FFFFFF');
-            else if(config.colorMode === 5) updateTheme('#FF4400'); // Heatmap orange theme
-            
-            // Fix Invert State Color
+            else if(config.colorMode === 5) updateTheme('#FF4400');
             if(config.isInverted && config.colorMode !== 5) updateTheme('#000000');
         });
 
@@ -652,7 +631,6 @@
             config.isInverted = !config.isInverted;
             invBtn.innerText = config.isInverted ? "INV: ON" : "INV: OFF";
             invBtn.classList.toggle('active-state', config.isInverted);
-            
             if(config.isInverted) {
                 updateTheme('#000000'); 
             } else {
@@ -669,6 +647,23 @@
             bgBtn.innerText = config.showLiveBg ? "BG: ON" : "BG: OFF";
             bgBtn.classList.toggle('active-state', config.showLiveBg);
         });
+        
+        txtBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            config.showText = !config.showText;
+            txtBtn.innerText = config.showText ? "TXT: ON" : "TXT: OFF";
+            txtBtn.classList.toggle('active-state', !config.showText); // Highlight when OFF to show state? or standard.
+            // Let's standardise: White when ON, Transparent when OFF. 
+            // Actually, let's invert logic: Button active state = ON.
+            if(config.showText) txtBtn.classList.remove('active-state');
+            else txtBtn.classList.add('active-state'); // Highlight "OFF" state or just use text
+        });
+        // Initial state fix for TXT button
+        txtBtn.classList.add('active-state'); // Default is ON, so make it look active? 
+        // Let's stick to: White BG = Special State. 
+        // Let's make TXT: ON default (transparent), TXT: OFF active (white).
+        txtBtn.classList.remove('active-state');
+
 
         startBtn.addEventListener('click', initCamera);
 

@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_CAM</title>
+    <title>DATA_DECAY_CAM_V2</title>
     <style>
         :root {
             --bg: #050505;
-            --main: #eebb00; /* Cyber Yellow from ref image 1 */
+            --main: #eebb00; /* Cyber Yellow */
             --dim: #443300;
             --text-font: 'Courier New', Courier, monospace;
         }
@@ -31,29 +31,32 @@
             z-index: 1;
         }
 
-        /* Overlay for permissions/UI */
+        /* UI Layer */
         #ui-layer {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            bottom: 30px;
+            left: 0;
+            width: 100%;
             z-index: 10;
-            color: var(--main);
-            text-align: center;
-            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            pointer-events: none; /* Let clicks pass through to canvas */
         }
 
         button {
-            background: transparent;
+            background: rgba(0,0,0,0.8);
             border: 1px solid var(--main);
             color: var(--main);
-            padding: 10px 20px;
+            padding: 12px 24px;
             font-family: var(--text-font);
             font-weight: bold;
+            font-size: 14px;
             cursor: pointer;
-            pointer-events: auto;
+            pointer-events: auto; /* Re-enable clicks for buttons */
             text-transform: uppercase;
             letter-spacing: 2px;
+            backdrop-filter: blur(4px);
         }
 
         button:active {
@@ -71,16 +74,31 @@
             position: absolute;
             pointer-events: none;
         }
+        
+        /* Initial Start Screen */
+        #start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+        }
     </style>
 </head>
 <body>
 
     <div class="scanline"></div>
-    <div id="ui-layer">
-        <button id="start-btn">INITIALIZE_SENSOR</button>
+    
+    <div id="start-screen">
+        <button id="start-btn">INITIALIZE_SYSTEM</button>
     </div>
-    <canvas id="canvas"></canvas>
 
+    <div id="ui-layer" style="display:none;">
+        <button id="flip-btn">FLIP_CAM</button>
+        <button id="color-btn">PALETTE</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
     <video id="video" playsinline style="display:none"></video>
 
     <script>
@@ -88,7 +106,10 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('video');
         const startBtn = document.getElementById('start-btn');
+        const flipBtn = document.getElementById('flip-btn');
+        const colorBtn = document.getElementById('color-btn');
         const uiLayer = document.getElementById('ui-layer');
+        const startScreen = document.getElementById('start-screen');
 
         // PWA Manifest Injection
         const manifest = {
@@ -107,20 +128,19 @@
 
         // Configuration
         let config = {
-            gridSize: 14, // Size of text grid
-            colorActive: '#eebb00', // Bright
-            colorPassive: '#332a00', // Dark
-            threshold: 80, // Brightness threshold
+            gridSize: 14, 
+            colorActive: '#eebb00', 
+            colorPassive: '#332a00', 
+            threshold: 75,
+            facingMode: 'environment' // 'user' or 'environment'
         };
 
-        let width, height;
-        let animationId;
+        let width, height, stream;
         
-        // "Alien" chars (Image 5 vibe) + Data chars (Image 2/4)
+        // Character sets
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
-        const lightChars = ".:-^,`' "; 
-        const techWords = ["ERR", "VOID", "NULL", "0xFF", "SCAN", "LINK", "404", "BIO", "MEM", "RES", "Z-1"];
-
+        
+        // Resize Handler
         function resize() {
             width = window.innerWidth;
             height = window.innerHeight;
@@ -130,50 +150,68 @@
         window.addEventListener('resize', resize);
         resize();
 
+        // Camera Logic
         async function initCamera() {
+            // Stop previous stream if exists
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
+                stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        facingMode: 'environment',
+                        facingMode: config.facingMode,
                         width: { ideal: 640 },
                         height: { ideal: 480 }
                     }, 
                     audio: false 
                 });
                 video.srcObject = stream;
-                video.play();
-                uiLayer.style.display = 'none';
-                render();
+                await video.play();
+                
+                // UI Management
+                startScreen.style.display = 'none';
+                uiLayer.style.display = 'flex';
+                
+                // Only start render loop once
+                if (!window.isRendering) {
+                    window.isRendering = true;
+                    render();
+                }
             } catch (err) {
-                alert("CAMERA_ACCESS_DENIED: " + err);
+                alert("ERR_ACCESS_DENIED: " + err);
             }
         }
 
-        // Processing Logic
+        // Main Render Loop
         function render() {
-            // Draw video to invisible canvas context for data reading
+            // Draw video to temp context for data reading
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
-            
-            // Downscale for performance & grid logic
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
+            
             tempCanvas.width = cols;
             tempCanvas.height = rows;
             
-            tempCtx.drawImage(video, 0, 0, cols, rows);
+            // Mirror image if in selfie mode
+            if (config.facingMode === 'user') {
+                tempCtx.translate(cols, 0);
+                tempCtx.scale(-1, 1);
+            }
             
-            // Get pixel data
+            tempCtx.drawImage(video, 0, 0, cols, rows);
             const frame = tempCtx.getImageData(0, 0, cols, rows);
             const data = frame.data;
 
-            // Clear Screen with slight fade for trail effect
+            // Clear Screen (trail effect)
             ctx.fillStyle = 'rgba(5, 5, 5, 0.4)';
             ctx.fillRect(0, 0, width, height);
             
             ctx.font = `${config.gridSize}px monospace`;
             ctx.textBaseline = 'top';
 
+            // Grid Loop
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const index = (y * cols + x) * 4;
@@ -185,80 +223,78 @@
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
-                    // LOGIC: aesthetic randomness based on reality
-                    
                     if (brightness > config.threshold) {
-                        // High Energy: Draw "Data Blocks" or Tech Words (Image 2 & 4 style)
                         ctx.fillStyle = config.colorActive;
-                        
-                        // Random chance to show a full word or a dense block
-                        if (Math.random() > 0.98) {
-                            const word = techWords[Math.floor(Math.random() * techWords.length)];
-                            ctx.fillText(word, posX, posY);
-                        } else {
-                            // Glitchy changing character
-                            const char = denseChars[Math.floor(Math.random() * denseChars.length)];
-                            ctx.fillText(char, posX, posY);
-                        }
+                        // Glitchy character
+                        const char = denseChars[Math.floor(Math.random() * denseChars.length)];
+                        ctx.fillText(char, posX, posY);
                     } else {
-                        // Low Energy: Draw Grid Structure (Image 5 style)
-                        // Make it look like coordinates or empty slots
-                        if (Math.random() > 0.9) {
+                        // Passive grid dots
+                        if (Math.random() > 0.92) {
                             ctx.fillStyle = config.colorPassive;
                             ctx.fillText(".", posX, posY);
-                        } else if (Math.random() > 0.995) {
-                            // Random dim floating numbers
-                            ctx.fillStyle = '#2a2a2a';
-                            ctx.fillText((Math.random()*100).toFixed(0), posX, posY);
                         }
                     }
                 }
             }
 
-            // OVERLAY: The "Image 1" aesthetic (Flyer/Poster text)
-            // Randomly inject large text blocks unrelated to camera grid
-            if (Math.random() > 0.95) {
-                drawRandomOverlay();
-            }
+            // REAL DATA OVERLAY
+            // Randomly select a few points to show their RAW DATA
+            if (Math.random() > 0.90) { // Frequency of popups
+                
+                // Pick a random grid coordinate
+                const rx = Math.floor(Math.random() * cols);
+                const ry = Math.floor(Math.random() * rows);
+                const rIdx = (ry * cols + rx) * 4;
+                
+                // Extract real data
+                const rVal = data[rIdx];
+                const gVal = data[rIdx+1];
+                const bVal = data[rIdx+2];
+                const lum = Math.floor((rVal + gVal + bVal) / 3);
+                
+                // Screen coordinates
+                const screenX = rx * config.gridSize;
+                const screenY = ry * config.gridSize;
 
-            animationId = requestAnimationFrame(render);
-        }
-
-        function drawRandomOverlay() {
-            const x = Math.random() * width;
-            const y = Math.random() * height;
-            ctx.fillStyle = '#ffffff';
-            ctx.font = `bold ${Math.random() * 20 + 10}px monospace`;
-            
-            const randomMsg = [
-                "SYSTEM_HALT", 
-                "FC_18+", 
-                "Residents_Lviv", 
-                "23:00", 
-                "NO_SIGNAL", 
-                "MASK_REQ",
-                "//ABORT"
-            ];
-            const msg = randomMsg[Math.floor(Math.random() * randomMsg.length)];
-            ctx.fillText(msg, x, y);
-            
-            // Draw a line connecting nothing
-            if(Math.random() > 0.5) {
+                // Generate Data String
+                const dataTypes = [
+                    `RGB[${rVal},${gVal},${bVal}]`,
+                    `POS<${screenX},${screenY}>`,
+                    `LUM:${lum}%`,
+                    `HEX:#${rVal.toString(16).padStart(2,'0')}${gVal.toString(16).padStart(2,'0')}${bVal.toString(16).padStart(2,'0')}`,
+                    `MEM:${rVal * gVal}`
+                ];
+                
+                const txt = dataTypes[Math.floor(Math.random() * dataTypes.length)];
+                
+                // Draw connecting line
                 ctx.strokeStyle = config.colorActive;
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + (Math.random() * 100 - 50), y + (Math.random() * 100 - 50));
+                ctx.moveTo(screenX, screenY);
+                ctx.lineTo(screenX + 20, screenY - 20); // offset line
                 ctx.stroke();
+
+                // Draw Text
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold 12px monospace`;
+                ctx.fillText(txt.toUpperCase(), screenX + 22, screenY - 30);
             }
+
+            requestAnimationFrame(render);
         }
 
+        // Event Listeners
         startBtn.addEventListener('click', initCamera);
+        
+        flipBtn.addEventListener('click', () => {
+            config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
+            initCamera();
+        });
 
-        // Touch to toggle color schemes
-        window.addEventListener('touchstart', () => {
-             // Cycle colors: Yellow -> White -> Matrix Green
-            if(config.colorActive === '#eebb00') {
+        colorBtn.addEventListener('click', () => {
+             if(config.colorActive === '#eebb00') {
                 config.colorActive = '#ffffff'; 
                 config.colorPassive = '#444444';
             } else if (config.colorActive === '#ffffff') {

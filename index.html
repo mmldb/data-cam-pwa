@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V11</title>
+    <title>DATA_DECAY_V12_CORRUPTION</title>
     <style>
         :root {
             --bg: #050505;
@@ -25,6 +25,19 @@
             touch-action: none;
         }
 
+        /* Invert Mode Styles */
+        body.inverted {
+            filter: invert(1);
+        }
+        /* Keep UI readable in invert mode by re-inverting it */
+        body.inverted #ui-container {
+            filter: invert(1);
+        }
+        /* Keep canvas raw in invert mode? No, we want canvas inverted too. 
+           But we need the Video to look correct if Live BG is on.
+           Actually, simpler to handle Invert in Canvas logic.
+        */
+
         canvas {
             display: block;
             position: absolute;
@@ -33,7 +46,6 @@
             z-index: 1;
         }
 
-        /* --- UI --- */
         #ui-container {
             position: absolute;
             top: 0;
@@ -59,17 +71,16 @@
         .controls-top {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 15px; /* Tighter gap */
             margin-top: 10px;
         }
 
-        /* Text Input */
         #custom-text {
             background: rgba(0,0,0,0.6);
             border: 1px solid var(--main);
             color: var(--main);
             font-family: var(--text-font);
-            font-size: 16px; /* Prevents iOS zoom */
+            font-size: 16px; 
             padding: 10px;
             text-transform: uppercase;
             width: 100%;
@@ -80,7 +91,6 @@
         
         #custom-text::placeholder { color: rgba(255,255,255,0.5); }
 
-        /* Sliders */
         .slider-row {
             display: flex;
             align-items: center;
@@ -122,7 +132,6 @@
             box-shadow: 0px 1px 5px rgba(0,0,0,0.5);
         }
 
-        /* Buttons Bottom */
         .controls-bottom {
             display: flex;
             flex-direction: column;
@@ -135,7 +144,6 @@
             gap: 8px;
         }
         
-        /* Second row has 2 buttons */
         .button-row-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -157,6 +165,12 @@
         }
         
         button:active { background: var(--main); color: #000; }
+        
+        /* Highlight active invert button */
+        button.active-state {
+            background: var(--main);
+            color: #000;
+        }
 
         #start-screen {
             position: absolute;
@@ -199,7 +213,7 @@
     
     <div id="start-screen">
         <button id="start-btn">INITIALIZE</button>
-        <div class="version">V11.0_ULTIMATE</div>
+        <div class="version">V12.0_CORRUPTION</div>
     </div>
 
     <div id="ui-container">
@@ -220,8 +234,8 @@
                 <input type="range" id="input-fade" min="0" max="100" value="30">
             </div>
             <div class="slider-row">
-                <span class="label">CONTRAST</span>
-                <input type="range" id="input-contrast" min="0" max="200" value="20">
+                <span class="label">FX</span>
+                <input type="range" id="input-fx" min="0" max="100" value="0">
             </div>
         </div>
 
@@ -230,7 +244,7 @@
                 <button id="flip-btn">FLIP</button>
                 <button id="mode-btn">MOD: GRID</button>
                 <button id="color-btn">CLR: WHT</button>
-                <button id="bg-btn">BG: OFF</button>
+                <button id="inv-btn">INV: OFF</button>
             </div>
             <div class="button-row-2">
                 <button id="freeze-btn">FRZ</button>
@@ -252,13 +266,13 @@
         const inputGrid = document.getElementById('input-grid');
         const inputFps = document.getElementById('input-fps');
         const inputFade = document.getElementById('input-fade');
-        const inputContrast = document.getElementById('input-contrast');
+        const inputFx = document.getElementById('input-fx'); // Replaced Contrast with FX
         const customTextInput = document.getElementById('custom-text');
         
         const flipBtn = document.getElementById('flip-btn');
         const modeBtn = document.getElementById('mode-btn');
         const colorBtn = document.getElementById('color-btn');
-        const bgBtn = document.getElementById('bg-btn');
+        const invBtn = document.getElementById('inv-btn'); // Replaced BG button with Invert
         const freezeBtn = document.getElementById('freeze-btn');
         const snapBtn = document.getElementById('snap-btn');
 
@@ -266,19 +280,20 @@
             gridSize: 12,
             targetFPS: 30,
             fadeAlpha: 0.3, 
-            contrast: 20,
+            fxLevel: 0, // 0 to 100
             colorMode: 0, 
             chaosMode: false, 
-            showLiveBg: false,
+            isInverted: false,
             threshold: 60,
             facingMode: 'environment',
             mainColor: '#FFFFFF',
+            bgColor: '#050505',
             isFrozen: false
         };
 
         let width, height, stream;
         let lastTime = 0;
-        let frozenFrame = document.createElement('canvas'); // Buffer for frozen image
+        let frozenFrame = document.createElement('canvas'); 
         
         const defaultChars = "█▓▒░$@#&%+=WTF01"; 
         const microChars = "10.:"; 
@@ -321,12 +336,24 @@
                 let boxSize = config.gridSize + (this.mass * (config.gridSize * 0.2));
                 if(boxSize > config.gridSize * 10) boxSize = config.gridSize * 10;
                 
-                ctx.strokeStyle = (config.colorMode === 4) ? '#fff' : config.mainColor;
+                // Trackers follow color mode
+                let stroke = (config.colorMode === 4) ? '#fff' : config.mainColor;
+                if(config.isInverted && config.colorMode === 0) stroke = '#000000'; // Black tracker in paper mode
+                
+                ctx.strokeStyle = stroke;
                 ctx.lineWidth = 1;
-                ctx.strokeRect(screenX - boxSize/2, screenY - boxSize/2, boxSize, boxSize);
-                ctx.fillStyle = (config.colorMode === 4) ? '#fff' : config.mainColor;
+                
+                // Jitter tracker if FX is high
+                let jx = 0, jy = 0;
+                if (config.fxLevel > 10) {
+                    jx = (Math.random() - 0.5) * (config.fxLevel * 0.1);
+                    jy = (Math.random() - 0.5) * (config.fxLevel * 0.1);
+                }
+
+                ctx.strokeRect(screenX - boxSize/2 + jx, screenY - boxSize/2 + jy, boxSize, boxSize);
+                ctx.fillStyle = stroke;
                 ctx.font = '10px monospace';
-                ctx.fillText(this.id, screenX + boxSize/2 + 2, screenY - boxSize/2);
+                ctx.fillText(this.id, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy);
             }
         }
 
@@ -344,7 +371,6 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Prevent closing UI when typing
         customTextInput.addEventListener('click', (e) => e.stopPropagation());
 
         document.addEventListener('click', (e) => {
@@ -381,14 +407,12 @@
             config.gridSize = parseInt(inputGrid.value);
             config.targetFPS = parseInt(inputFps.value);
             config.fadeAlpha = parseInt(inputFade.value) / 100;
-            config.contrast = parseInt(inputContrast.value);
+            config.fxLevel = parseInt(inputFx.value); // Corruption level
             
-            // Handle Custom Text Source
             let useChars = defaultChars;
             const customTxt = customTextInput.value.toUpperCase();
             if(customTxt.length > 0) useChars = customTxt;
 
-            // Get Source Dimensions (Video or Frozen)
             let src = video;
             let vWidth = video.videoWidth;
             let vHeight = video.videoHeight;
@@ -402,28 +426,18 @@
             if (vWidth === 0) return;
 
             const scale = Math.max(width / vWidth, height / vHeight);
-            const xOffset = (width - (vWidth * scale)) / 2;
-            const yOffset = (height - (vHeight * scale)) / 2;
+            
+            // --- DRAW BACKGROUND ---
+            // If Inverted, BG is White, Text is Black.
+            // If Normal, BG is Black, Text is Color.
+            
+            let trailColor = config.isInverted ? `rgba(255, 255, 255, ${config.fadeAlpha})` : `rgba(5, 5, 5, ${config.fadeAlpha})`;
+            if (config.fadeAlpha < 0.05) trailColor = config.isInverted ? `rgba(255,255,255,0.05)` : `rgba(5,5,5,0.05)`;
+            
+            ctx.fillStyle = trailColor;
+            ctx.fillRect(0, 0, width, height);
 
-            // DRAW BACKGROUND
-            if (config.showLiveBg) {
-                ctx.save();
-                if(config.facingMode === 'user' && !config.isFrozen) { ctx.translate(width, 0); ctx.scale(-1, 1); }
-                else if (config.facingMode === 'user' && config.isFrozen) { /* Already flipped in capture */ }
-                
-                ctx.drawImage(src, xOffset, yOffset, vWidth * scale, vHeight * scale);
-                ctx.restore();
-                const dimVal = config.fadeAlpha * 0.9; 
-                ctx.fillStyle = `rgba(0, 0, 0, ${dimVal})`;
-                ctx.fillRect(0, 0, width, height);
-            } else {
-                let trailAlpha = config.fadeAlpha;
-                if(trailAlpha < 0.05) trailAlpha = 0.05; 
-                ctx.fillStyle = `rgba(5, 5, 5, ${trailAlpha})`;
-                ctx.fillRect(0, 0, width, height);
-            }
-
-            // PROCESSING BUFFER
+            // --- PROCESSING ---
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
             const tempCanvas = document.createElement('canvas');
@@ -440,7 +454,10 @@
             tempCtx.drawImage(src, gridXOff, gridYOff, vWidth * gridScale, vHeight * gridScale);
             const data = tempCtx.getImageData(0, 0, cols, rows).data;
 
-            const contrastFactor = (259 * (config.contrast + 255)) / (255 * (259 - config.contrast));
+            // Use FX Slider for Contrast boost + Distortion
+            // We'll hardcode a base contrast, and use FX slider for Glitch
+            const baseContrast = 20;
+            const contrastFactor = (259 * (baseContrast + 255)) / (255 * (259 - baseContrast));
             const brightnessMap = new Float32Array(cols * rows);
 
             ctx.textBaseline = 'top';
@@ -452,56 +469,91 @@
                     const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
                     
                     let bright = (r + g + b) / 3;
-                    if (config.contrast > 0) bright = contrastFactor * (bright - 128) + 128;
+                    bright = contrastFactor * (bright - 128) + 128;
                     brightnessMap[y * cols + x] = bright;
 
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
-                    let fillStyle = config.mainColor;
-                    if (config.colorMode === 4) fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
-                    else if (config.colorMode === 3) fillStyle = `rgb(${r},${g},${b})`;
+                    // COLOR LOGIC
+                    let fillStyle;
+                    if (config.isInverted && config.colorMode === 0) {
+                        fillStyle = '#000000'; // Black text in Paper Mode
+                    } else if (config.colorMode === 4) {
+                        fillStyle = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
+                    } else if (config.colorMode === 3) {
+                        fillStyle = `rgb(${r},${g},${b})`;
+                    } else {
+                        fillStyle = config.mainColor;
+                    }
+                    
                     ctx.fillStyle = fillStyle;
 
                     if (bright > config.threshold) {
                         
-                        if (config.chaosMode) {
+                        // --- CORRUPTION / GLITCH LOGIC ---
+                        // If FX > 0, we introduce random offsets and color splits
+                        let finalX = posX;
+                        let finalY = posY;
+                        let isGlitching = false;
+
+                        if (config.fxLevel > 0) {
+                            const probability = config.fxLevel / 200; // 0 to 0.5 chance
+                            if (Math.random() < probability) {
+                                isGlitching = true;
+                                const shake = (config.fxLevel / 10);
+                                finalX += (Math.random() - 0.5) * shake;
+                                finalY += (Math.random() - 0.5) * shake;
+                                
+                                // RGB SPLIT (Chromatic Aberration)
+                                if (config.fxLevel > 50) {
+                                    // Draw Red Offset
+                                    ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+                                    ctx.fillText("▒", finalX + 2, finalY);
+                                    // Draw Blue Offset
+                                    ctx.fillStyle = 'rgba(0, 0, 255, 0.7)';
+                                    ctx.fillText("▒", finalX - 2, finalY);
+                                    // Restore Color
+                                    ctx.fillStyle = fillStyle; 
+                                }
+                            }
+                        }
+
+                        // --- CHARACTER SELECTION ---
+                        if (config.chaosMode || isGlitching) {
                              const rand = Math.random();
                              if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
                                 ctx.font = `bold ${config.gridSize * 2}px monospace`;
-                                // If custom text, iterate, else random
                                 const char = (customTxt.length > 0) ? useChars[Math.floor(time/100) % useChars.length] : useChars[Math.floor(Math.random() * useChars.length)];
-                                ctx.fillText(char, posX, posY);
+                                ctx.fillText(char, finalX, finalY);
                             } else if (rand > 0.85 && customTxt.length === 0) { 
-                                // Micro clusters only in random mode (cleaner)
                                 const subSize = config.gridSize / 2;
                                 ctx.font = `${subSize}px monospace`;
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY);
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY);
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX, posY + subSize);
-                                ctx.fillText(microChars[Math.floor(Math.random()*4)], posX + subSize, posY + subSize);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX, finalY);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX + subSize, finalY);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX, finalY + subSize);
+                                ctx.fillText(microChars[Math.floor(Math.random()*4)], finalX + subSize, finalY + subSize);
                             } else {
                                 ctx.font = `${config.gridSize}px monospace`;
                                 const char = useChars[Math.floor(Math.random() * useChars.length)];
-                                ctx.fillText(char, posX, posY);
+                                ctx.fillText(char, finalX, finalY);
                             }
                         } else {
                             ctx.font = `${config.gridSize}px monospace`;
-                            // Iterate custom text cleanly in Grid Mode
                             let char;
                             if (customTxt.length > 0) {
-                                // Map position to text index for readable flow
                                 const charIdx = (x + y) % useChars.length;
                                 char = useChars[charIdx];
                             } else {
                                 char = useChars[Math.floor(Math.random() * useChars.length)];
                             }
-                            ctx.fillText(char, posX, posY);
+                            ctx.fillText(char, finalX, finalY);
                         }
 
                     } else {
-                        if (!config.showLiveBg && Math.random() > 0.95) {
-                            ctx.fillStyle = '#333';
+                        // Passive Dots
+                        if (Math.random() > 0.95) {
+                            ctx.fillStyle = config.isInverted ? '#ccc' : '#333';
                             ctx.font = `${config.gridSize}px monospace`;
                             ctx.fillText(".", posX, posY);
                         }
@@ -531,11 +583,9 @@
             }
         }
 
-        // --- FREEZE LOGIC ---
         freezeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!config.isFrozen) {
-                // Capture Frame
                 frozenFrame.width = video.videoWidth;
                 frozenFrame.height = video.videoHeight;
                 const fCtx = frozenFrame.getContext('2d');
@@ -554,24 +604,20 @@
             }
         });
 
-        // --- SNAPSHOT LOGIC ---
         snapBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const link = document.createElement('a');
             link.download = `DATA_DECAY_${Date.now()}.png`;
             link.href = canvas.toDataURL();
             link.click();
-            
-            // Visual feedback
             snapBtn.innerText = "SAVED";
             setTimeout(() => snapBtn.innerText = "SNAP", 1000);
         });
 
-        // --- OTHER EVENTS ---
         flipBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
-            config.isFrozen = false; // Unfreeze on flip
+            config.isFrozen = false;
             freezeBtn.innerText = "FRZ";
             initCamera();
         });
@@ -593,15 +639,25 @@
             else if(config.colorMode === 2) updateTheme('#00ff41');
             else if(config.colorMode === 3) updateTheme('#FFFFFF'); 
             else if(config.colorMode === 4) updateTheme('#FFFFFF');
-            
-            // Reset freeze button color if not active
             if(!config.isFrozen) freezeBtn.style.color = config.mainColor;
         });
 
-        bgBtn.addEventListener('click', (e) => {
+        invBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            config.showLiveBg = !config.showLiveBg;
-            bgBtn.innerText = config.showLiveBg ? "BG: ON" : "BG: OFF";
+            config.isInverted = !config.isInverted;
+            invBtn.innerText = config.isInverted ? "INV: ON" : "INV: OFF";
+            invBtn.classList.toggle('active-state', config.isInverted);
+            
+            if(config.isInverted) {
+                document.body.classList.add('inverted');
+                updateTheme('#000000'); // UI becomes black
+            } else {
+                document.body.classList.remove('inverted');
+                // Restore color based on current mode
+                if(config.colorMode === 1) updateTheme('#eebb00');
+                else if(config.colorMode === 2) updateTheme('#00ff41');
+                else updateTheme('#FFFFFF');
+            }
         });
 
         startBtn.addEventListener('click', initCamera);

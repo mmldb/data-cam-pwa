@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_CAM_V2</title>
+    <title>DATA_DECAY_V3</title>
     <style>
         :root {
             --bg: #050505;
@@ -21,6 +21,8 @@
             background-color: var(--bg);
             overflow: hidden;
             font-family: var(--text-font);
+            -webkit-user-select: none; /* Disable selection */
+            user-select: none;
         }
 
         canvas {
@@ -31,32 +33,96 @@
             z-index: 1;
         }
 
-        /* UI Layer */
-        #ui-layer {
+        /* Container for all UI elements */
+        #ui-container {
             position: absolute;
-            bottom: 30px;
+            top: 0;
             left: 0;
             width: 100%;
+            height: 100%;
             z-index: 10;
+            opacity: 0; /* Hidden by default */
+            transition: opacity 0.2s;
+            pointer-events: none; /* Let touches pass through when hidden */
+        }
+
+        #ui-container.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Top Controls (Sliders) */
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid var(--main);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            backdrop-filter: blur(4px);
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--main);
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* Custom Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 60%;
+            background: transparent;
+        }
+        
+        input[type=range]:focus { outline: none; }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            background: var(--main);
+            border: 1px solid #fff;
+            cursor: pointer;
+            margin-top: -5px;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #333;
+            border: 1px solid var(--dim);
+        }
+
+        /* Bottom Buttons */
+        .button-row {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
             display: flex;
             justify-content: center;
-            gap: 20px;
-            pointer-events: none; /* Let clicks pass through to canvas */
+            gap: 15px;
         }
 
         button {
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             border: 1px solid var(--main);
             color: var(--main);
-            padding: 12px 24px;
+            padding: 12px 20px;
             font-family: var(--text-font);
             font-weight: bold;
             font-size: 14px;
-            cursor: pointer;
-            pointer-events: auto; /* Re-enable clicks for buttons */
             text-transform: uppercase;
-            letter-spacing: 2px;
-            backdrop-filter: blur(4px);
+            cursor: pointer;
         }
 
         button:active {
@@ -64,7 +130,15 @@
             color: var(--bg);
         }
 
-        /* Scanline effect */
+        /* Start Button (Always Visible initially) */
+        #start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+        }
+
         .scanline {
             width: 100%;
             height: 100%;
@@ -73,15 +147,6 @@
             background-size: 100% 2px, 3px 100%;
             position: absolute;
             pointer-events: none;
-        }
-        
-        /* Initial Start Screen */
-        #start-screen {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 20;
         }
     </style>
 </head>
@@ -93,9 +158,23 @@
         <button id="start-btn">INITIALIZE_SYSTEM</button>
     </div>
 
-    <div id="ui-layer" style="display:none;">
-        <button id="flip-btn">FLIP_CAM</button>
-        <button id="color-btn">PALETTE</button>
+    <div id="ui-container">
+        
+        <div class="control-panel">
+            <div class="control-row">
+                <label>GRID_SIZE [<span id="val-grid">14</span>px]</label>
+                <input type="range" id="input-grid" min="8" max="40" value="14">
+            </div>
+            <div class="control-row">
+                <label>REFRESH_RATE [<span id="val-fps">30</span> FPS]</label>
+                <input type="range" id="input-fps" min="1" max="60" value="30">
+            </div>
+        </div>
+
+        <div class="button-row">
+            <button id="flip-btn">FLIP_CAM</button>
+            <button id="color-btn">PALETTE</button>
+        </div>
     </div>
 
     <canvas id="canvas"></canvas>
@@ -106,12 +185,17 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('video');
         const startBtn = document.getElementById('start-btn');
+        const uiContainer = document.getElementById('ui-container');
+        
+        // Controls
+        const inputGrid = document.getElementById('input-grid');
+        const inputFps = document.getElementById('input-fps');
+        const valGrid = document.getElementById('val-grid');
+        const valFps = document.getElementById('val-fps');
         const flipBtn = document.getElementById('flip-btn');
         const colorBtn = document.getElementById('color-btn');
-        const uiLayer = document.getElementById('ui-layer');
-        const startScreen = document.getElementById('start-screen');
 
-        // PWA Manifest Injection
+        // PWA Manifest
         const manifest = {
             "name": "DataDecay",
             "short_name": "Decay",
@@ -129,18 +213,17 @@
         // Configuration
         let config = {
             gridSize: 14, 
+            targetFPS: 30,
             colorActive: '#eebb00', 
             colorPassive: '#332a00', 
             threshold: 75,
-            facingMode: 'environment' // 'user' or 'environment'
+            facingMode: 'environment'
         };
 
         let width, height, stream;
-        
-        // Character sets
+        let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
         
-        // Resize Handler
         function resize() {
             width = window.innerWidth;
             height = window.innerHeight;
@@ -150,13 +233,20 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Camera Logic
+        // Interaction: Toggle UI on Tap
+        document.addEventListener('click', (e) => {
+            // Prevent toggling if clicking a control
+            if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.control-panel')) return;
+            
+            if(startBtn.style.display === 'none') { // Only work if system started
+                uiContainer.classList.toggle('visible');
+            }
+        });
+
         async function initCamera() {
-            // Stop previous stream if exists
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
             }
-
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
@@ -169,23 +259,31 @@
                 video.srcObject = stream;
                 await video.play();
                 
-                // UI Management
-                startScreen.style.display = 'none';
-                uiLayer.style.display = 'flex';
+                document.getElementById('start-screen').style.display = 'none';
+                startBtn.style.display = 'none'; // Mark system as started
                 
-                // Only start render loop once
                 if (!window.isRendering) {
                     window.isRendering = true;
-                    render();
+                    requestAnimationFrame(render);
                 }
             } catch (err) {
-                alert("ERR_ACCESS_DENIED: " + err);
+                alert("ERR_ACCESS_DENIED");
             }
         }
 
-        // Main Render Loop
-        function render() {
-            // Draw video to temp context for data reading
+        function render(time) {
+            requestAnimationFrame(render);
+
+            // FPS Throttling
+            const interval = 1000 / config.targetFPS;
+            if (time - lastTime < interval) return;
+            lastTime = time;
+
+            // Update Grid Size from slider if changed
+            config.gridSize = parseInt(inputGrid.value);
+            config.targetFPS = parseInt(inputFps.value);
+
+            // Virtual Canvas for processing
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             const cols = Math.floor(width / config.gridSize);
@@ -194,7 +292,6 @@
             tempCanvas.width = cols;
             tempCanvas.height = rows;
             
-            // Mirror image if in selfie mode
             if (config.facingMode === 'user') {
                 tempCtx.translate(cols, 0);
                 tempCtx.scale(-1, 1);
@@ -204,32 +301,26 @@
             const frame = tempCtx.getImageData(0, 0, cols, rows);
             const data = frame.data;
 
-            // Clear Screen (trail effect)
+            // Draw Background
             ctx.fillStyle = 'rgba(5, 5, 5, 0.4)';
             ctx.fillRect(0, 0, width, height);
             
             ctx.font = `${config.gridSize}px monospace`;
             ctx.textBaseline = 'top';
 
-            // Grid Loop
+            // Draw Grid
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const index = (y * cols + x) * 4;
-                    const r = data[index];
-                    const g = data[index + 1];
-                    const b = data[index + 2];
-                    const brightness = (r + g + b) / 3;
-
+                    const brightness = (data[index] + data[index+1] + data[index+2]) / 3;
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
                     if (brightness > config.threshold) {
                         ctx.fillStyle = config.colorActive;
-                        // Glitchy character
                         const char = denseChars[Math.floor(Math.random() * denseChars.length)];
                         ctx.fillText(char, posX, posY);
                     } else {
-                        // Passive grid dots
                         if (Math.random() > 0.92) {
                             ctx.fillStyle = config.colorPassive;
                             ctx.fillText(".", posX, posY);
@@ -238,62 +329,59 @@
                 }
             }
 
-            // REAL DATA OVERLAY
-            // Randomly select a few points to show their RAW DATA
-            if (Math.random() > 0.90) { // Frequency of popups
-                
-                // Pick a random grid coordinate
+            // Real Data Popups
+            if (Math.random() > 0.90) { 
                 const rx = Math.floor(Math.random() * cols);
                 const ry = Math.floor(Math.random() * rows);
                 const rIdx = (ry * cols + rx) * 4;
                 
-                // Extract real data
                 const rVal = data[rIdx];
                 const gVal = data[rIdx+1];
                 const bVal = data[rIdx+2];
-                const lum = Math.floor((rVal + gVal + bVal) / 3);
-                
-                // Screen coordinates
                 const screenX = rx * config.gridSize;
                 const screenY = ry * config.gridSize;
 
-                // Generate Data String
                 const dataTypes = [
                     `RGB[${rVal},${gVal},${bVal}]`,
-                    `POS<${screenX},${screenY}>`,
-                    `LUM:${lum}%`,
-                    `HEX:#${rVal.toString(16).padStart(2,'0')}${gVal.toString(16).padStart(2,'0')}${bVal.toString(16).padStart(2,'0')}`,
-                    `MEM:${rVal * gVal}`
+                    `X:${screenX} Y:${screenY}`,
+                    `FPS:${config.targetFPS}`,
+                    `HEX:#${rVal.toString(16).padStart(2,'0')}${gVal.toString(16).padStart(2,'0')}${bVal.toString(16).padStart(2,'0')}`
                 ];
                 
                 const txt = dataTypes[Math.floor(Math.random() * dataTypes.length)];
                 
-                // Draw connecting line
                 ctx.strokeStyle = config.colorActive;
                 ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(screenX, screenY);
-                ctx.lineTo(screenX + 20, screenY - 20); // offset line
+                ctx.lineTo(screenX + 20, screenY - 20);
                 ctx.stroke();
 
-                // Draw Text
                 ctx.fillStyle = '#ffffff';
                 ctx.font = `bold 12px monospace`;
-                ctx.fillText(txt.toUpperCase(), screenX + 22, screenY - 30);
+                ctx.fillText(txt, screenX + 22, screenY - 30);
             }
-
-            requestAnimationFrame(render);
         }
 
-        // Event Listeners
+        // UI Event Listeners
+        inputGrid.addEventListener('input', (e) => {
+            valGrid.innerText = e.target.value;
+        });
+
+        inputFps.addEventListener('input', (e) => {
+            valFps.innerText = e.target.value;
+        });
+
         startBtn.addEventListener('click', initCamera);
         
-        flipBtn.addEventListener('click', () => {
+        flipBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Stop tap from closing UI
             config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
             initCamera();
         });
 
-        colorBtn.addEventListener('click', () => {
+        colorBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
              if(config.colorActive === '#eebb00') {
                 config.colorActive = '#ffffff'; 
                 config.colorPassive = '#444444';

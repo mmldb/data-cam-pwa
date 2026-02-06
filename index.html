@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V3</title>
+    <title>DATA_DECAY_V4</title>
     <style>
         :root {
             --bg: #050505;
-            --main: #eebb00; /* Cyber Yellow */
+            --main: #eebb00; 
             --dim: #443300;
             --text-font: 'Courier New', Courier, monospace;
         }
@@ -21,7 +21,7 @@
             background-color: var(--bg);
             overflow: hidden;
             font-family: var(--text-font);
-            -webkit-user-select: none; /* Disable selection */
+            -webkit-user-select: none;
             user-select: none;
         }
 
@@ -33,7 +33,7 @@
             z-index: 1;
         }
 
-        /* Container for all UI elements */
+        /* UI Container */
         #ui-container {
             position: absolute;
             top: 0;
@@ -41,9 +41,14 @@
             width: 100%;
             height: 100%;
             z-index: 10;
-            opacity: 0; /* Hidden by default */
+            opacity: 0;
             transition: opacity 0.2s;
-            pointer-events: none; /* Let touches pass through when hidden */
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         #ui-container.visible {
@@ -51,12 +56,8 @@
             pointer-events: auto;
         }
 
-        /* Top Controls (Sliders) */
+        /* Sliders Panel */
         .control-panel {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
             background: rgba(0, 0, 0, 0.85);
             border: 1px solid var(--main);
             padding: 15px;
@@ -64,6 +65,7 @@
             flex-direction: column;
             gap: 15px;
             backdrop-filter: blur(4px);
+            margin-top: 20px;
         }
 
         .control-row {
@@ -75,10 +77,9 @@
             font-weight: bold;
         }
 
-        /* Custom Slider Styling */
         input[type=range] {
             -webkit-appearance: none;
-            width: 60%;
+            width: 55%;
             background: transparent;
         }
         
@@ -103,34 +104,36 @@
         }
 
         /* Bottom Buttons */
-        .button-row {
-            position: absolute;
-            bottom: 40px;
-            left: 0;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            gap: 15px;
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
         }
 
         button {
             background: rgba(0,0,0,0.9);
             border: 1px solid var(--main);
             color: var(--main);
-            padding: 12px 20px;
+            padding: 12px 0;
             font-family: var(--text-font);
             font-weight: bold;
-            font-size: 14px;
+            font-size: 12px;
             text-transform: uppercase;
             cursor: pointer;
         }
 
-        button:active {
+        button.active {
             background: var(--main);
             color: var(--bg);
         }
+        
+        button:active {
+            background: #fff;
+            color: #000;
+        }
 
-        /* Start Button (Always Visible initially) */
+        /* Start Button */
         #start-screen {
             position: absolute;
             top: 50%;
@@ -138,6 +141,8 @@
             transform: translate(-50%, -50%);
             z-index: 20;
         }
+        
+        #start-btn { padding: 15px 30px; font-size: 16px; }
 
         .scanline {
             width: 100%;
@@ -162,18 +167,23 @@
         
         <div class="control-panel">
             <div class="control-row">
-                <label>GRID_SIZE [<span id="val-grid">14</span>px]</label>
+                <label>GRID: <span id="val-grid">14</span>px</label>
                 <input type="range" id="input-grid" min="8" max="40" value="14">
             </div>
             <div class="control-row">
-                <label>REFRESH_RATE [<span id="val-fps">30</span> FPS]</label>
+                <label>FPS: <span id="val-fps">30</span></label>
                 <input type="range" id="input-fps" min="1" max="60" value="30">
+            </div>
+            <div class="control-row">
+                <label>DECAY: <span id="val-fade">40</span>%</label>
+                <input type="range" id="input-fade" min="1" max="100" value="40">
             </div>
         </div>
 
-        <div class="button-row">
+        <div class="button-grid">
             <button id="flip-btn">FLIP_CAM</button>
-            <button id="color-btn">PALETTE</button>
+            <button id="rnd-btn">RND_CLR</button>
+            <button id="real-btn">SRC_CLR</button>
         </div>
     </div>
 
@@ -187,13 +197,18 @@
         const startBtn = document.getElementById('start-btn');
         const uiContainer = document.getElementById('ui-container');
         
-        // Controls
+        // Input Elements
         const inputGrid = document.getElementById('input-grid');
         const inputFps = document.getElementById('input-fps');
+        const inputFade = document.getElementById('input-fade');
         const valGrid = document.getElementById('val-grid');
         const valFps = document.getElementById('val-fps');
+        const valFade = document.getElementById('val-fade');
+        
+        // Buttons
         const flipBtn = document.getElementById('flip-btn');
-        const colorBtn = document.getElementById('color-btn');
+        const rndBtn = document.getElementById('rnd-btn');
+        const realBtn = document.getElementById('real-btn');
 
         // PWA Manifest
         const manifest = {
@@ -210,12 +225,14 @@
         link.href = 'data:application/json;base64,' + btoa(JSON.stringify(manifest));
         document.head.appendChild(link);
 
-        // Configuration
+        // App Config
         let config = {
             gridSize: 14, 
             targetFPS: 30,
+            fadeAlpha: 0.4, // Controlled by DECAY slider
             colorActive: '#eebb00', 
             colorPassive: '#332a00', 
+            useRealColors: false,
             threshold: 75,
             facingMode: 'environment'
         };
@@ -223,6 +240,11 @@
         let width, height, stream;
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
+
+        // Update Theme Color in CSS variable for UI consistency
+        function updateTheme(color) {
+            document.documentElement.style.setProperty('--main', color);
+        }
         
         function resize() {
             width = window.innerWidth;
@@ -233,62 +255,48 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Interaction: Toggle UI on Tap
+        // Interaction: Tap to toggle UI
         document.addEventListener('click', (e) => {
-            // Prevent toggling if clicking a control
             if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.control-panel')) return;
-            
-            if(startBtn.style.display === 'none') { // Only work if system started
+            if(startBtn.style.display === 'none') {
                 uiContainer.classList.toggle('visible');
             }
         });
 
         async function initCamera() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
+            if (stream) stream.getTracks().forEach(track => track.stop());
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: config.facingMode,
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
-                    }, 
+                    video: { facingMode: config.facingMode, width: { ideal: 640 }, height: { ideal: 480 } }, 
                     audio: false 
                 });
                 video.srcObject = stream;
                 await video.play();
-                
                 document.getElementById('start-screen').style.display = 'none';
-                startBtn.style.display = 'none'; // Mark system as started
-                
+                startBtn.style.display = 'none';
                 if (!window.isRendering) {
                     window.isRendering = true;
                     requestAnimationFrame(render);
                 }
-            } catch (err) {
-                alert("ERR_ACCESS_DENIED");
-            }
+            } catch (err) { alert("ERR: " + err); }
         }
 
         function render(time) {
             requestAnimationFrame(render);
-
-            // FPS Throttling
             const interval = 1000 / config.targetFPS;
             if (time - lastTime < interval) return;
             lastTime = time;
 
-            // Update Grid Size from slider if changed
+            // Sync Sliders
             config.gridSize = parseInt(inputGrid.value);
             config.targetFPS = parseInt(inputFps.value);
+            config.fadeAlpha = parseInt(inputFade.value) / 100;
 
-            // Virtual Canvas for processing
+            // Prepare Processing Canvas
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
-            
             tempCanvas.width = cols;
             tempCanvas.height = rows;
             
@@ -296,13 +304,13 @@
                 tempCtx.translate(cols, 0);
                 tempCtx.scale(-1, 1);
             }
-            
             tempCtx.drawImage(video, 0, 0, cols, rows);
             const frame = tempCtx.getImageData(0, 0, cols, rows);
             const data = frame.data;
 
-            // Draw Background
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.4)';
+            // Draw Background (The Fade Effect)
+            // We use standard black, but vary the Alpha based on the slider
+            ctx.fillStyle = `rgba(5, 5, 5, ${config.fadeAlpha})`;
             ctx.fillRect(0, 0, width, height);
             
             ctx.font = `${config.gridSize}px monospace`;
@@ -311,16 +319,27 @@
             // Draw Grid
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
-                    const index = (y * cols + x) * 4;
-                    const brightness = (data[index] + data[index+1] + data[index+2]) / 3;
+                    const idx = (y * cols + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx+1];
+                    const b = data[idx+2];
+                    const brightness = (r + g + b) / 3;
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
                     if (brightness > config.threshold) {
-                        ctx.fillStyle = config.colorActive;
+                        // Color Determination
+                        if (config.useRealColors) {
+                            ctx.fillStyle = `rgb(${r},${g},${b})`;
+                        } else {
+                            ctx.fillStyle = config.colorActive;
+                        }
+
+                        // Draw Character
                         const char = denseChars[Math.floor(Math.random() * denseChars.length)];
                         ctx.fillText(char, posX, posY);
                     } else {
+                        // Passive Grid
                         if (Math.random() > 0.92) {
                             ctx.fillStyle = config.colorPassive;
                             ctx.fillText(".", posX, posY);
@@ -334,7 +353,6 @@
                 const rx = Math.floor(Math.random() * cols);
                 const ry = Math.floor(Math.random() * rows);
                 const rIdx = (ry * cols + rx) * 4;
-                
                 const rVal = data[rIdx];
                 const gVal = data[rIdx+1];
                 const bVal = data[rIdx+2];
@@ -344,13 +362,11 @@
                 const dataTypes = [
                     `RGB[${rVal},${gVal},${bVal}]`,
                     `X:${screenX} Y:${screenY}`,
-                    `FPS:${config.targetFPS}`,
                     `HEX:#${rVal.toString(16).padStart(2,'0')}${gVal.toString(16).padStart(2,'0')}${bVal.toString(16).padStart(2,'0')}`
                 ];
                 
-                const txt = dataTypes[Math.floor(Math.random() * dataTypes.length)];
-                
-                ctx.strokeStyle = config.colorActive;
+                // Color for popup lines
+                ctx.strokeStyle = config.useRealColors ? '#ffffff' : config.colorActive;
                 ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(screenX, screenY);
@@ -359,38 +375,50 @@
 
                 ctx.fillStyle = '#ffffff';
                 ctx.font = `bold 12px monospace`;
-                ctx.fillText(txt, screenX + 22, screenY - 30);
+                ctx.fillText(dataTypes[Math.floor(Math.random() * dataTypes.length)], screenX + 22, screenY - 30);
             }
         }
 
-        // UI Event Listeners
-        inputGrid.addEventListener('input', (e) => {
-            valGrid.innerText = e.target.value;
-        });
-
-        inputFps.addEventListener('input', (e) => {
-            valFps.innerText = e.target.value;
-        });
+        // Listeners for Sliders (Update labels)
+        inputGrid.addEventListener('input', (e) => valGrid.innerText = e.target.value);
+        inputFps.addEventListener('input', (e) => valFps.innerText = e.target.value);
+        inputFade.addEventListener('input', (e) => valFade.innerText = e.target.value);
 
         startBtn.addEventListener('click', initCamera);
         
         flipBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Stop tap from closing UI
+            e.stopPropagation();
             config.facingMode = config.facingMode === 'environment' ? 'user' : 'environment';
             initCamera();
         });
 
-        colorBtn.addEventListener('click', (e) => {
+        // Random Color Generator
+        rndBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-             if(config.colorActive === '#eebb00') {
-                config.colorActive = '#ffffff'; 
-                config.colorPassive = '#444444';
-            } else if (config.colorActive === '#ffffff') {
-                config.colorActive = '#00ff41';
-                config.colorPassive = '#003300';
+            config.useRealColors = false;
+            realBtn.classList.remove('active');
+            
+            // Generate random bright color
+            const h = Math.floor(Math.random() * 360);
+            const color = `hsl(${h}, 100%, 50%)`;
+            
+            config.colorActive = color;
+            config.colorPassive = '#222'; // Reset passive to neutral
+            
+            updateTheme(color); // Update UI color
+        });
+
+        // Real Color Toggle
+        realBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            config.useRealColors = !config.useRealColors;
+            
+            if(config.useRealColors) {
+                realBtn.classList.add('active');
+                updateTheme('#ffffff'); // Set UI to white for neutrality
             } else {
-                config.colorActive = '#eebb00';
-                config.colorPassive = '#332a00';
+                realBtn.classList.remove('active');
+                updateTheme(config.colorActive); // Revert to active color
             }
         });
 

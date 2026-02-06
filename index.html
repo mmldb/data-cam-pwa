@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V14_SWARM</title>
+    <title>DATA_DECAY_V15_TRACER</title>
     <style>
         :root {
             --bg: #050505;
@@ -46,7 +46,7 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 30px 20px;
+            padding: 20px 20px; /* Reduced top padding to fit new slider */
             box-sizing: border-box;
         }
 
@@ -58,7 +58,7 @@
         .controls-top {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px; /* Tighter gap */
             margin-top: 10px;
         }
 
@@ -133,7 +133,7 @@
         
         .button-row-2 {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr; /* Changed to 3 cols for TXT btn */
+            grid-template-columns: 1fr 1fr 1fr; 
             gap: 8px;
         }
 
@@ -195,7 +195,7 @@
     
     <div id="start-screen">
         <button id="start-btn">INITIALIZE</button>
-        <div class="version">V14.0_SWARM</div>
+        <div class="version">V15.0_TRACER</div>
     </div>
 
     <div id="ui-container">
@@ -222,6 +222,9 @@
             <div class="slider-row">
                 <span class="label">TRK</span>
                 <input type="range" id="input-trk" min="0" max="150" value="5">
+            </div>
+            <div class="slider-row">
+                <span class="label">TRL</span> <input type="range" id="input-trl" min="0" max="100" value="30">
             </div>
         </div>
 
@@ -255,6 +258,7 @@
         const inputFade = document.getElementById('input-fade');
         const inputFx = document.getElementById('input-fx');
         const inputTrk = document.getElementById('input-trk');
+        const inputTrl = document.getElementById('input-trl'); // Trail input
         const customTextInput = document.getElementById('custom-text');
         
         const flipBtn = document.getElementById('flip-btn');
@@ -271,11 +275,12 @@
             fadeAlpha: 0.3, 
             fxLevel: 0,
             maxTrackers: 5,
+            trailLength: 30, // Default trail length
             colorMode: 0, 
             chaosMode: false, 
             isInverted: false,
             showLiveBg: false,
-            showText: true, // Master toggle for ASCII
+            showText: true, 
             threshold: 60,
             facingMode: 'environment',
             mainColor: '#FFFFFF',
@@ -293,14 +298,19 @@
         class Tracker {
             constructor(gx, gy) {
                 this.gx = gx; this.gy = gy;
-                this.id = "T-" + Math.floor(Math.random() * 99); // Short ID
+                this.id = "T-" + Math.floor(Math.random() * 99); 
                 this.life = 30 + Math.random() * 60; 
                 this.active = true;
                 this.mass = 1; 
+                // Determine Type: 60% chance for Point, 40% for Box
+                this.type = Math.random() > 0.4 ? 'POINT' : 'BOX';
+                this.history = []; // For storing trail
             }
+
             update(data, cols, rows, brightnessMap) {
                 this.life--;
                 if (this.life <= 0) this.active = false;
+                
                 let sumX = 0, sumY = 0, count = 0;
                 const range = 3; 
                 for(let dy = -range; dy <= range; dy++) {
@@ -314,10 +324,27 @@
                         }
                     }
                 }
+                
                 if(count > 0) {
-                    this.gx = sumX / count; this.gy = sumY / count; this.mass = count; 
-                } else { this.life -= 5; }
+                    // Update Position
+                    this.gx = sumX / count; 
+                    this.gy = sumY / count; 
+                    this.mass = count; 
+
+                    // Update History (Only for Points usually, but could be for all)
+                    if (this.type === 'POINT') {
+                        this.history.push({x: this.gx, y: this.gy});
+                        // Trim history
+                        if (this.history.length > config.trailLength) {
+                            this.history.shift();
+                        }
+                    }
+
+                } else { 
+                    this.life -= 5; 
+                }
             }
+
             draw(ctx) {
                 const screenX = this.gx * config.gridSize;
                 const screenY = this.gy * config.gridSize;
@@ -329,8 +356,9 @@
                 if(config.isInverted && config.colorMode === 0) stroke = '#000000';
                 
                 ctx.strokeStyle = stroke;
+                ctx.fillStyle = stroke;
                 ctx.lineWidth = 1;
-                
+
                 // Jitter
                 let jx = 0, jy = 0;
                 if (config.fxLevel > 10) {
@@ -338,19 +366,42 @@
                     jy = (Math.random() - 0.5) * (config.fxLevel * 0.1);
                 }
 
-                ctx.strokeRect(screenX - boxSize/2 + jx, screenY - boxSize/2 + jy, boxSize, boxSize);
-                
-                // INTELLIGENT TEXT: 
-                // Only show text if tracker count is low OR if this specific tracker is "big" (mass > 5)
-                // This prevents the screen from becoming a solid block of text at 150 trackers.
-                if (config.maxTrackers < 20 || this.mass > 5) {
-                    ctx.fillStyle = stroke;
-                    ctx.font = '9px monospace';
-                    ctx.fillText(`${this.id}`, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy);
+                if (this.type === 'BOX') {
+                    // --- RECTANGLE TRACKER ---
+                    ctx.strokeRect(screenX - boxSize/2 + jx, screenY - boxSize/2 + jy, boxSize, boxSize);
                     
-                    // Add coords sometimes
-                    if (this.mass > 8) {
-                         ctx.fillText(`[${Math.floor(this.gx)},${Math.floor(this.gy)}]`, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy + 10);
+                    if (config.maxTrackers < 20 || this.mass > 5) {
+                        ctx.font = '9px monospace';
+                        ctx.fillText(`${this.id}`, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy);
+                        if (this.mass > 8) {
+                             ctx.fillText(`[${Math.floor(this.gx)},${Math.floor(this.gy)}]`, screenX + boxSize/2 + 2 + jx, screenY - boxSize/2 + jy + 10);
+                        }
+                    }
+                } else {
+                    // --- POINT TRACKER (TRACER) ---
+                    // Draw Trail
+                    if (this.history.length > 1 && config.trailLength > 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(
+                            this.history[0].x * config.gridSize + jx, 
+                            this.history[0].y * config.gridSize + jy
+                        );
+                        for (let i = 1; i < this.history.length; i++) {
+                            ctx.lineTo(
+                                this.history[i].x * config.gridSize + jx, 
+                                this.history[i].y * config.gridSize + jy
+                            );
+                        }
+                        ctx.stroke();
+                    }
+
+                    // Draw Point Head
+                    ctx.fillRect(screenX + jx - 1.5, screenY + jy - 1.5, 3, 3);
+                    
+                    // Optional: Small label if mass is high
+                    if (this.mass > 8 && config.maxTrackers < 20) {
+                        ctx.font = '8px monospace';
+                        ctx.fillText(`TRC`, screenX + 4 + jx, screenY + jy);
                     }
                 }
             }
@@ -409,6 +460,7 @@
             config.fadeAlpha = parseInt(inputFade.value) / 100;
             config.fxLevel = parseInt(inputFx.value);
             config.maxTrackers = parseInt(inputTrk.value);
+            config.trailLength = parseInt(inputTrl.value); // Update trail length
             
             let useChars = defaultChars;
             const customTxt = customTextInput.value.toUpperCase();
@@ -445,7 +497,6 @@
                 ctx.fillRect(0, 0, width, height);
             }
 
-
             // --- 2. GRID & TRACKER PREP ---
             const cols = Math.floor(width / config.gridSize);
             const rows = Math.floor(height / config.gridSize);
@@ -473,13 +524,11 @@
                         const idx = (y * cols + x) * 4;
                         const r = data[idx]; const g = data[idx+1]; const b = data[idx+2];
                         let bright = (r + g + b) / 3;
-                        brightnessMap[y * cols + x] = bright; // Store for trackers even if text hidden? No, need loop for trackers separately if text is off?
-                        // Actually, we need to populate brightnessMap regardless.
+                        brightnessMap[y * cols + x] = bright; 
                         
                         const posX = x * config.gridSize;
                         const posY = y * config.gridSize;
 
-                        // COLOR
                         let fillStyle;
                         if (config.colorMode === 5) { 
                             const hue = (1 - (bright / 255)) * 240; 
@@ -496,7 +545,6 @@
                         ctx.fillStyle = fillStyle;
 
                         if (bright > config.threshold) {
-                            // Glitch
                             let finalX = posX;
                             let finalY = posY;
                             let isGlitching = false;
@@ -512,7 +560,6 @@
                                 }
                             }
 
-                            // Render Char
                             if (config.chaosMode || isGlitching) {
                                 const rand = Math.random();
                                 if (bright > 180 && rand > 0.96 && x < cols - 1 && y < rows - 1) {
@@ -552,7 +599,6 @@
                     }
                 }
             } else {
-                // TEXT OFF MODE: We still need brightnessMap for trackers
                 for (let i = 0; i < cols * rows; i++) {
                     const idx = i * 4;
                     brightnessMap[i] = (data[idx] + data[idx+1] + data[idx+2]) / 3;
@@ -560,11 +606,9 @@
             }
 
             // --- 4. TRACKERS ---
-            // Cleanup
             for (let i = trackers.length - 1; i >= 0; i--) {
                 if (!trackers[i].active) trackers.splice(i, 1);
             }
-            // Spawn (Higher rate if max is high)
             const spawnRate = config.maxTrackers > 20 ? 0.5 : 0.8;
             if (trackers.length < config.maxTrackers && Math.random() > spawnRate) {
                 let attempts = 0;
@@ -581,7 +625,6 @@
             if (trackers.length > config.maxTrackers) {
                 trackers.splice(0, trackers.length - config.maxTrackers);
             }
-            // Draw
             for (let i = trackers.length - 1; i >= 0; i--) {
                 const t = trackers[i];
                 t.update(data, cols, rows, brightnessMap);
@@ -652,18 +695,8 @@
             e.stopPropagation();
             config.showText = !config.showText;
             txtBtn.innerText = config.showText ? "TXT: ON" : "TXT: OFF";
-            txtBtn.classList.toggle('active-state', !config.showText); // Highlight when OFF to show state? or standard.
-            // Let's standardise: White when ON, Transparent when OFF. 
-            // Actually, let's invert logic: Button active state = ON.
-            if(config.showText) txtBtn.classList.remove('active-state');
-            else txtBtn.classList.add('active-state'); // Highlight "OFF" state or just use text
+            txtBtn.classList.toggle('active-state', !config.showText); 
         });
-        // Initial state fix for TXT button
-        txtBtn.classList.add('active-state'); // Default is ON, so make it look active? 
-        // Let's stick to: White BG = Special State. 
-        // Let's make TXT: ON default (transparent), TXT: OFF active (white).
-        txtBtn.classList.remove('active-state');
-
 
         startBtn.addEventListener('click', initCamera);
 

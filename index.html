@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V6_LIVE</title>
+    <title>DATA_DECAY_V7_ASPECT</title>
     <style>
         :root {
             --bg: #050505;
@@ -23,6 +23,7 @@
             font-family: var(--text-font);
             -webkit-user-select: none;
             user-select: none;
+            touch-action: none; /* Prevents scroll bounce */
         }
 
         canvas {
@@ -60,10 +61,10 @@
         .control-panel {
             background: rgba(0, 0, 0, 0.85);
             border: 1px solid var(--main);
-            padding: 15px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 25px; /* More space between sliders */
             backdrop-filter: blur(4px);
             margin-top: 20px;
         }
@@ -73,26 +74,28 @@
             align-items: center;
             justify-content: space-between;
             color: var(--main);
-            font-size: 12px;
+            font-size: 14px; /* Larger Text */
             font-weight: bold;
         }
 
+        /* IMPROVED SLIDERS (Easier to touch) */
         input[type=range] {
-            -webkit-appearance: none;
-            width: 55%;
-            background: transparent;
+            -webkit-appearance: none; /* Hides the slider so that custom slider can be made */
+            width: 55%; /* Specific width is required for Firefox. */
+            background: transparent; /* Otherwise white in Chrome */
+            height: 30px; /* Taller touch area */
+            cursor: pointer;
         }
-        
-        input[type=range]:focus { outline: none; }
 
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            height: 14px;
-            width: 14px;
+            height: 24px;
+            width: 24px;
             background: var(--main);
-            border: 1px solid #fff;
+            border: 2px solid #fff;
             cursor: pointer;
-            margin-top: -5px;
+            margin-top: -10px; /* You need to specify a margin in Chrome, but in Firefox and IE it is automatic */
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
 
         input[type=range]::-webkit-slider-runnable-track {
@@ -102,12 +105,16 @@
             background: #333;
             border: 1px solid var(--dim);
         }
+        
+        input[type=range]:focus {
+            outline: none;
+        }
 
         /* Bottom Buttons */
         .button-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr; /* 4 columns now */
-            gap: 8px;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 12px;
             margin-bottom: 20px;
         }
 
@@ -115,10 +122,10 @@
             background: rgba(0,0,0,0.9);
             border: 1px solid var(--main);
             color: var(--main);
-            padding: 12px 0;
+            padding: 15px 0; /* Taller buttons */
             font-family: var(--text-font);
             font-weight: bold;
-            font-size: 11px; /* Slightly smaller for 4 buttons */
+            font-size: 12px;
             text-transform: uppercase;
             cursor: pointer;
             white-space: nowrap;
@@ -129,7 +136,6 @@
             color: var(--bg);
         }
 
-        /* Start Button */
         #start-screen {
             position: absolute;
             top: 50%;
@@ -138,7 +144,7 @@
             z-index: 20;
         }
         
-        #start-btn { padding: 15px 30px; font-size: 16px; }
+        #start-btn { padding: 20px 40px; font-size: 18px; }
 
         .scanline {
             width: 100%;
@@ -162,16 +168,20 @@
     <div id="ui-container">
         <div class="control-panel">
             <div class="control-row">
-                <label>GRID: <span id="val-grid">14</span>px</label>
+                <label>GRID</label>
                 <input type="range" id="input-grid" min="8" max="40" value="14">
             </div>
             <div class="control-row">
-                <label>FPS: <span id="val-fps">30</span></label>
+                <label>FPS</label>
                 <input type="range" id="input-fps" min="1" max="60" value="30">
             </div>
             <div class="control-row">
-                <label>DECAY: <span id="val-fade">40</span>%</label>
+                <label>DECAY</label>
                 <input type="range" id="input-fade" min="1" max="100" value="40">
+            </div>
+            <div class="control-row">
+                <label>CONTRAST</label>
+                <input type="range" id="input-contrast" min="0" max="200" value="0">
             </div>
         </div>
 
@@ -179,7 +189,7 @@
             <button id="flip-btn">FLIP</button>
             <button id="rnd-btn">RND</button>
             <button id="real-btn">SRC</button>
-            <button id="bg-btn">LIVE_BG</button>
+            <button id="bg-btn">BG</button>
         </div>
     </div>
 
@@ -196,9 +206,7 @@
         const inputGrid = document.getElementById('input-grid');
         const inputFps = document.getElementById('input-fps');
         const inputFade = document.getElementById('input-fade');
-        const valGrid = document.getElementById('val-grid');
-        const valFps = document.getElementById('val-fps');
-        const valFade = document.getElementById('val-fade');
+        const inputContrast = document.getElementById('input-contrast');
         
         const flipBtn = document.getElementById('flip-btn');
         const rndBtn = document.getElementById('rnd-btn');
@@ -209,6 +217,7 @@
             gridSize: 14, 
             targetFPS: 30,
             fadeAlpha: 0.4, 
+            contrast: 0, // Added Contrast
             colorActive: '#eebb00', 
             colorPassive: '#332a00', 
             useRealColors: false,
@@ -221,7 +230,7 @@
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
 
-        // --- TRACKER SYSTEM V2 (Rectangles + Instant Snap) ---
+        // Tracker Class
         let trackers = [];
         const MAX_TRACKERS = 3;
 
@@ -232,18 +241,16 @@
                 this.id = "TRK-" + Math.floor(Math.random() * 999);
                 this.life = 60 + Math.random() * 60; 
                 this.active = true;
-                this.mass = 1; // Used for rectangle size
+                this.mass = 1; 
             }
 
-            update(data, cols, rows) {
+            update(data, cols, rows, brightnessMap) {
                 this.life--;
                 if (this.life <= 0) this.active = false;
 
                 let sumX = 0;
                 let sumY = 0;
                 let count = 0;
-                
-                // Scan area around current position
                 const range = 5; 
                 
                 for(let dy = -range; dy <= range; dy++) {
@@ -252,9 +259,9 @@
                         const ny = Math.floor(this.gy + dy);
                         
                         if(nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                            const idx = (ny * cols + nx) * 4;
-                            const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-                            if(brightness > config.threshold) {
+                            // Use brightness map we already calculated
+                            const b = brightnessMap[ny * cols + nx];
+                            if(b > config.threshold) {
                                 sumX += nx;
                                 sumY += ny;
                                 count++;
@@ -263,13 +270,11 @@
                     }
                 }
 
-                // If we found bright pixels, SNAP to them instantly
                 if(count > 0) {
-                    this.gx = sumX / count; // No smoothing, instant jump
+                    this.gx = sumX / count; 
                     this.gy = sumY / count;
-                    this.mass = count; // Size depends on pixel count
+                    this.mass = count; 
                 } else {
-                    // Lost target
                     this.life -= 5; 
                 }
             }
@@ -277,26 +282,17 @@
             draw(ctx) {
                 const screenX = this.gx * config.gridSize;
                 const screenY = this.gy * config.gridSize;
-                
-                // Calculate size based on mass (number of bright pixels)
-                // Base size + scaler
                 let boxSize = config.gridSize + (this.mass * (config.gridSize * 0.2));
-                
-                // Clamp max size so it doesn't cover screen
                 if(boxSize > config.gridSize * 10) boxSize = config.gridSize * 10;
 
                 ctx.strokeStyle = config.useRealColors ? '#fff' : config.colorActive;
                 ctx.lineWidth = 2;
-                
-                // Draw RECTANGLE
                 ctx.strokeRect(screenX - boxSize/2, screenY - boxSize/2, boxSize, boxSize);
-
-                // Label
+                
                 ctx.fillStyle = config.useRealColors ? '#fff' : config.colorActive;
                 ctx.font = '10px monospace';
                 ctx.fillText(`${this.id}`, screenX + boxSize/2 + 4, screenY - boxSize/2);
                 
-                // Crosshair center
                 ctx.beginPath();
                 ctx.moveTo(screenX - 4, screenY);
                 ctx.lineTo(screenX + 4, screenY);
@@ -319,6 +315,7 @@
         window.addEventListener('resize', resize);
         resize();
 
+        // UI Toggle
         document.addEventListener('click', (e) => {
             if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.control-panel')) return;
             if(startBtn.style.display === 'none') {
@@ -329,8 +326,13 @@
         async function initCamera() {
             if (stream) stream.getTracks().forEach(track => track.stop());
             try {
+                // We ask for a high resolution to ensure we have enough data for scaling
                 stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: config.facingMode, width: { ideal: 640 }, height: { ideal: 480 } }, 
+                    video: { 
+                        facingMode: config.facingMode,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }, 
                     audio: false 
                 });
                 video.srcObject = stream;
@@ -350,69 +352,107 @@
             if (time - lastTime < interval) return;
             lastTime = time;
 
+            // Update inputs
             config.gridSize = parseInt(inputGrid.value);
             config.targetFPS = parseInt(inputFps.value);
             config.fadeAlpha = parseInt(inputFade.value) / 100;
+            config.contrast = parseInt(inputContrast.value); // 0 to 200
 
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            const cols = Math.floor(width / config.gridSize);
-            const rows = Math.floor(height / config.gridSize);
-            tempCanvas.width = cols;
-            tempCanvas.height = rows;
-            
-            if (config.facingMode === 'user') {
-                tempCtx.translate(cols, 0);
-                tempCtx.scale(-1, 1);
-            }
-            tempCtx.drawImage(video, 0, 0, cols, rows);
-            const frame = tempCtx.getImageData(0, 0, cols, rows);
-            const data = frame.data;
+            // Aspect Ratio Calculation (Cover Logic)
+            const vWidth = video.videoWidth;
+            const vHeight = video.videoHeight;
+            if (vWidth === 0) return; // Video not ready
 
-            // --- BACKGROUND RENDER ---
+            const scale = Math.max(width / vWidth, height / vHeight);
+            const xOffset = (width - (vWidth * scale)) / 2;
+            const yOffset = (height - (vHeight * scale)) / 2;
+
+            // --- 1. Background (Raw Video) ---
             if (config.showLiveBg) {
-                // 1. Draw Actual Video Stream
                 ctx.save();
                 if(config.facingMode === 'user') {
                     ctx.translate(width, 0);
                     ctx.scale(-1, 1);
                 }
-                ctx.drawImage(video, 0, 0, width, height);
+                // Draw properly scaled video
+                ctx.drawImage(video, xOffset, yOffset, vWidth * scale, vHeight * scale);
                 ctx.restore();
                 
-                // 2. Draw Dimmer (controlled by Decay slider)
-                // Use higher minimum opacity so text is readable
                 const dimAlpha = 0.2 + (config.fadeAlpha * 0.7); 
                 ctx.fillStyle = `rgba(0, 0, 0, ${dimAlpha})`;
                 ctx.fillRect(0, 0, width, height);
-                
             } else {
-                // Classic Decay Trails
                 ctx.fillStyle = `rgba(5, 5, 5, ${config.fadeAlpha})`;
                 ctx.fillRect(0, 0, width, height);
             }
+
+            // --- 2. Data Processing ---
+            // Create a small temp canvas for grid analysis that MATCHES the cropped aspect ratio
+            const cols = Math.floor(width / config.gridSize);
+            const rows = Math.floor(height / config.gridSize);
             
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = cols;
+            tempCanvas.height = rows;
+
+            // We must draw the video into this tiny grid canvas using the SAME aspect logic
+            // but scaled down to col/row size
+            const gridScale = Math.max(cols / vWidth, rows / vHeight);
+            const gridXOff = (cols - (vWidth * gridScale)) / 2;
+            const gridYOff = (rows - (vHeight * gridScale)) / 2;
+
+            if (config.facingMode === 'user') {
+                tempCtx.translate(cols, 0);
+                tempCtx.scale(-1, 1);
+            }
+
+            tempCtx.drawImage(video, gridXOff, gridYOff, vWidth * gridScale, vHeight * gridScale);
+            
+            const frame = tempCtx.getImageData(0, 0, cols, rows);
+            const data = frame.data;
+
+            // Pre-calculate contrast factor
+            // Formula: factor = (259 * (contrast + 255)) / (255 * (259 - contrast))
+            // Input contrast is 0-200. We map it to -128 to 128 roughly for the formula
+            const cInput = config.contrast; // 0 to 200
+            // Map 0-200 to standard contrast range. Let's act like 0 is normal, 200 is high.
+            // Actually, let's just use a simple multiplier for brightness difference
+            const contrastFactor = (259 * (cInput + 255)) / (255 * (259 - cInput));
+
+            const brightnessMap = new Float32Array(cols * rows); // Store for trackers
+
             ctx.font = `${config.gridSize}px monospace`;
             ctx.textBaseline = 'top';
 
-            // GRID RENDER
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const idx = (y * cols + x) * 4;
                     const r = data[idx];
                     const g = data[idx+1];
                     const b = data[idx+2];
-                    const brightness = (r + g + b) / 3;
+                    
+                    // Standard Brightness
+                    let bright = (r + g + b) / 3;
+
+                    // Apply Contrast
+                    // NewValue = Factor * (OldValue - 128) + 128
+                    if (config.contrast > 0) {
+                        bright = contrastFactor * (bright - 128) + 128;
+                    }
+
+                    brightnessMap[y * cols + x] = bright;
+
                     const posX = x * config.gridSize;
                     const posY = y * config.gridSize;
 
-                    if (brightness > config.threshold) {
+                    if (bright > config.threshold) {
                         if (config.useRealColors) ctx.fillStyle = `rgb(${r},${g},${b})`;
                         else ctx.fillStyle = config.colorActive;
+                        
                         const char = denseChars[Math.floor(Math.random() * denseChars.length)];
                         ctx.fillText(char, posX, posY);
                     } else {
-                        // If live BG is on, make passive dots very subtle or invisible
                         if (!config.showLiveBg && Math.random() > 0.92) {
                             ctx.fillStyle = config.colorPassive;
                             ctx.fillText(".", posX, posY);
@@ -421,15 +461,13 @@
                 }
             }
 
-            // TRACKER RENDER
+            // --- 3. Trackers ---
             if (trackers.length < MAX_TRACKERS && Math.random() > 0.95) {
                 let attempts = 0;
                 while(attempts < 10) {
                     const rx = Math.floor(Math.random() * cols);
                     const ry = Math.floor(Math.random() * rows);
-                    const idx = (ry * cols + rx) * 4;
-                    const b = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-                    if (b > config.threshold) {
+                    if (brightnessMap[ry * cols + rx] > config.threshold) {
                         trackers.push(new Tracker(rx, ry));
                         break;
                     }
@@ -439,12 +477,12 @@
 
             for (let i = trackers.length - 1; i >= 0; i--) {
                 const t = trackers[i];
-                t.update(data, cols, rows);
+                t.update(data, cols, rows, brightnessMap);
                 t.draw(ctx);
                 if (!t.active) trackers.splice(i, 1);
             }
 
-            // DATA POPUPS
+            // --- 4. Popups ---
             if (Math.random() > 0.92) { 
                 const rx = Math.floor(Math.random() * cols);
                 const ry = Math.floor(Math.random() * rows);
@@ -457,20 +495,19 @@
                    if(Math.abs(t.gx - rx) < 5 && Math.abs(t.gy - ry) < 5) overlap = true;
                 });
 
-                if(!overlap) {
+                if(!overlap && brightnessMap[ry*cols+rx] > 20) { // Only show if visible
                     const rVal = data[idx];
                     const txt = `x${rVal.toString(16)}`;
-                    ctx.fillStyle = config.showLiveBg ? '#fff' : '#aaa'; // Brighter text if BG is on
+                    ctx.fillStyle = config.showLiveBg ? '#fff' : '#aaa'; 
                     ctx.font = `bold 10px monospace`;
                     ctx.fillText(txt, screenX, screenY);
                 }
             }
         }
 
-        // Listeners
-        inputGrid.addEventListener('input', (e) => valGrid.innerText = e.target.value);
-        inputFps.addEventListener('input', (e) => valFps.innerText = e.target.value);
-        inputFade.addEventListener('input', (e) => valFade.innerText = e.target.value);
+        inputGrid.addEventListener('input', (e) => {});
+        inputFps.addEventListener('input', (e) => {});
+        inputFade.addEventListener('input', (e) => {});
 
         startBtn.addEventListener('click', initCamera);
         

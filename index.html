@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <title>DATA_DECAY_CAM</title>
+    <style>
+        :root {
+            --bg: #050505;
+            --main: #eebb00; /* Cyber Yellow from ref image 1 */
+            --dim: #443300;
+            --text-font: 'Courier New', Courier, monospace;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            overflow: hidden;
+            font-family: var(--text-font);
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Overlay for permissions/UI */
+        #ui-layer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            color: var(--main);
+            text-align: center;
+            pointer-events: none;
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--main);
+            color: var(--main);
+            padding: 10px 20px;
+            font-family: var(--text-font);
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        button:active {
+            background: var(--main);
+            color: var(--bg);
+        }
+
+        /* Scanline effect */
+        .scanline {
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
+            background-size: 100% 2px, 3px 100%;
+            position: absolute;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scanline"></div>
+    <div id="ui-layer">
+        <button id="start-btn">INITIALIZE_SENSOR</button>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <video id="video" playsinline style="display:none"></video>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('start-btn');
+        const uiLayer = document.getElementById('ui-layer');
+
+        // PWA Manifest Injection
+        const manifest = {
+            "name": "DataDecay",
+            "short_name": "Decay",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#000000",
+            "theme_color": "#000000",
+            "icons": [{"src": "https://placehold.co/192x192/000000/eebb00?text=DATA", "sizes": "192x192", "type": "image/png"}]
+        };
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = 'data:application/json;base64,' + btoa(JSON.stringify(manifest));
+        document.head.appendChild(link);
+
+        // Configuration
+        let config = {
+            gridSize: 14, // Size of text grid
+            colorActive: '#eebb00', // Bright
+            colorPassive: '#332a00', // Dark
+            threshold: 80, // Brightness threshold
+        };
+
+        let width, height;
+        let animationId;
+        
+        // "Alien" chars (Image 5 vibe) + Data chars (Image 2/4)
+        const denseChars = "█▓▒░$@#&%+=WTF01"; 
+        const lightChars = ".:-^,`' "; 
+        const techWords = ["ERR", "VOID", "NULL", "0xFF", "SCAN", "LINK", "404", "BIO", "MEM", "RES", "Z-1"];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+                video.play();
+                uiLayer.style.display = 'none';
+                render();
+            } catch (err) {
+                alert("CAMERA_ACCESS_DENIED: " + err);
+            }
+        }
+
+        // Processing Logic
+        function render() {
+            // Draw video to invisible canvas context for data reading
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Downscale for performance & grid logic
+            const cols = Math.floor(width / config.gridSize);
+            const rows = Math.floor(height / config.gridSize);
+            tempCanvas.width = cols;
+            tempCanvas.height = rows;
+            
+            tempCtx.drawImage(video, 0, 0, cols, rows);
+            
+            // Get pixel data
+            const frame = tempCtx.getImageData(0, 0, cols, rows);
+            const data = frame.data;
+
+            // Clear Screen with slight fade for trail effect
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.4)';
+            ctx.fillRect(0, 0, width, height);
+            
+            ctx.font = `${config.gridSize}px monospace`;
+            ctx.textBaseline = 'top';
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const index = (y * cols + x) * 4;
+                    const r = data[index];
+                    const g = data[index + 1];
+                    const b = data[index + 2];
+                    const brightness = (r + g + b) / 3;
+
+                    const posX = x * config.gridSize;
+                    const posY = y * config.gridSize;
+
+                    // LOGIC: aesthetic randomness based on reality
+                    
+                    if (brightness > config.threshold) {
+                        // High Energy: Draw "Data Blocks" or Tech Words (Image 2 & 4 style)
+                        ctx.fillStyle = config.colorActive;
+                        
+                        // Random chance to show a full word or a dense block
+                        if (Math.random() > 0.98) {
+                            const word = techWords[Math.floor(Math.random() * techWords.length)];
+                            ctx.fillText(word, posX, posY);
+                        } else {
+                            // Glitchy changing character
+                            const char = denseChars[Math.floor(Math.random() * denseChars.length)];
+                            ctx.fillText(char, posX, posY);
+                        }
+                    } else {
+                        // Low Energy: Draw Grid Structure (Image 5 style)
+                        // Make it look like coordinates or empty slots
+                        if (Math.random() > 0.9) {
+                            ctx.fillStyle = config.colorPassive;
+                            ctx.fillText(".", posX, posY);
+                        } else if (Math.random() > 0.995) {
+                            // Random dim floating numbers
+                            ctx.fillStyle = '#2a2a2a';
+                            ctx.fillText((Math.random()*100).toFixed(0), posX, posY);
+                        }
+                    }
+                }
+            }
+
+            // OVERLAY: The "Image 1" aesthetic (Flyer/Poster text)
+            // Randomly inject large text blocks unrelated to camera grid
+            if (Math.random() > 0.95) {
+                drawRandomOverlay();
+            }
+
+            animationId = requestAnimationFrame(render);
+        }
+
+        function drawRandomOverlay() {
+            const x = Math.random() * width;
+            const y = Math.random() * height;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${Math.random() * 20 + 10}px monospace`;
+            
+            const randomMsg = [
+                "SYSTEM_HALT", 
+                "FC_18+", 
+                "Residents_Lviv", 
+                "23:00", 
+                "NO_SIGNAL", 
+                "MASK_REQ",
+                "//ABORT"
+            ];
+            const msg = randomMsg[Math.floor(Math.random() * randomMsg.length)];
+            ctx.fillText(msg, x, y);
+            
+            // Draw a line connecting nothing
+            if(Math.random() > 0.5) {
+                ctx.strokeStyle = config.colorActive;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + (Math.random() * 100 - 50), y + (Math.random() * 100 - 50));
+                ctx.stroke();
+            }
+        }
+
+        startBtn.addEventListener('click', initCamera);
+
+        // Touch to toggle color schemes
+        window.addEventListener('touchstart', () => {
+             // Cycle colors: Yellow -> White -> Matrix Green
+            if(config.colorActive === '#eebb00') {
+                config.colorActive = '#ffffff'; 
+                config.colorPassive = '#444444';
+            } else if (config.colorActive === '#ffffff') {
+                config.colorActive = '#00ff41';
+                config.colorPassive = '#003300';
+            } else {
+                config.colorActive = '#eebb00';
+                config.colorPassive = '#332a00';
+            }
+        });
+
+    </script>
+</body>
+</html>

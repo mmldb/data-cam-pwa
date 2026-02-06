@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <title>DATA_DECAY_V5_TRACKER</title>
+    <title>DATA_DECAY_V6_LIVE</title>
     <style>
         :root {
             --bg: #050505;
@@ -106,8 +106,8 @@
         /* Bottom Buttons */
         .button-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
+            grid-template-columns: 1fr 1fr 1fr 1fr; /* 4 columns now */
+            gap: 8px;
             margin-bottom: 20px;
         }
 
@@ -118,9 +118,10 @@
             padding: 12px 0;
             font-family: var(--text-font);
             font-weight: bold;
-            font-size: 12px;
+            font-size: 11px; /* Slightly smaller for 4 buttons */
             text-transform: uppercase;
             cursor: pointer;
+            white-space: nowrap;
         }
 
         button.active {
@@ -175,9 +176,10 @@
         </div>
 
         <div class="button-grid">
-            <button id="flip-btn">FLIP_CAM</button>
-            <button id="rnd-btn">RND_CLR</button>
-            <button id="real-btn">SRC_CLR</button>
+            <button id="flip-btn">FLIP</button>
+            <button id="rnd-btn">RND</button>
+            <button id="real-btn">SRC</button>
+            <button id="bg-btn">LIVE_BG</button>
         </div>
     </div>
 
@@ -191,7 +193,6 @@
         const startBtn = document.getElementById('start-btn');
         const uiContainer = document.getElementById('ui-container');
         
-        // Input Elements
         const inputGrid = document.getElementById('input-grid');
         const inputFps = document.getElementById('input-fps');
         const inputFade = document.getElementById('input-fade');
@@ -202,8 +203,8 @@
         const flipBtn = document.getElementById('flip-btn');
         const rndBtn = document.getElementById('rnd-btn');
         const realBtn = document.getElementById('real-btn');
+        const bgBtn = document.getElementById('bg-btn');
 
-        // App Config
         let config = {
             gridSize: 14, 
             targetFPS: 30,
@@ -211,6 +212,7 @@
             colorActive: '#eebb00', 
             colorPassive: '#332a00', 
             useRealColors: false,
+            showLiveBg: false,
             threshold: 75,
             facingMode: 'environment'
         };
@@ -219,33 +221,30 @@
         let lastTime = 0;
         const denseChars = "█▓▒░$@#&%+=WTF01"; 
 
-        // TRACKER SYSTEM
+        // --- TRACKER SYSTEM V2 (Rectangles + Instant Snap) ---
         let trackers = [];
         const MAX_TRACKERS = 3;
 
         class Tracker {
             constructor(gx, gy) {
-                this.gx = gx; // Grid Coordinates
+                this.gx = gx; 
                 this.gy = gy;
-                this.id = "T-" + Math.floor(Math.random() * 999);
-                this.life = 60 + Math.random() * 60; // How many frames it lives
-                this.maxLife = this.life;
+                this.id = "TRK-" + Math.floor(Math.random() * 999);
+                this.life = 60 + Math.random() * 60; 
                 this.active = true;
-                this.angle = 0;
+                this.mass = 1; // Used for rectangle size
             }
 
             update(data, cols, rows) {
                 this.life--;
-                this.angle += 0.1;
                 if (this.life <= 0) this.active = false;
 
-                // Simple "Center of Brightness" tracking in a 5x5 grid area
-                // This makes the tracker "stick" to moving bright objects
                 let sumX = 0;
                 let sumY = 0;
                 let count = 0;
                 
-                const range = 4; // look 4 cells around
+                // Scan area around current position
+                const range = 5; 
                 
                 for(let dy = -range; dy <= range; dy++) {
                     for(let dx = -range; dx <= range; dx++) {
@@ -264,45 +263,46 @@
                     }
                 }
 
+                // If we found bright pixels, SNAP to them instantly
                 if(count > 0) {
-                    // Move towards the center of brightness (Ease out)
-                    const targetX = sumX / count;
-                    const targetY = sumY / count;
-                    this.gx += (targetX - this.gx) * 0.2;
-                    this.gy += (targetY - this.gy) * 0.2;
+                    this.gx = sumX / count; // No smoothing, instant jump
+                    this.gy = sumY / count;
+                    this.mass = count; // Size depends on pixel count
+                } else {
+                    // Lost target
+                    this.life -= 5; 
                 }
             }
 
             draw(ctx) {
                 const screenX = this.gx * config.gridSize;
                 const screenY = this.gy * config.gridSize;
-                const size = config.gridSize * 3; // Size of the reticle
+                
+                // Calculate size based on mass (number of bright pixels)
+                // Base size + scaler
+                let boxSize = config.gridSize + (this.mass * (config.gridSize * 0.2));
+                
+                // Clamp max size so it doesn't cover screen
+                if(boxSize > config.gridSize * 10) boxSize = config.gridSize * 10;
 
                 ctx.strokeStyle = config.useRealColors ? '#fff' : config.colorActive;
                 ctx.lineWidth = 2;
                 
-                // Draw rotating broken circle
-                ctx.save();
-                ctx.translate(screenX, screenY);
-                ctx.rotate(this.angle);
-                
-                ctx.beginPath();
-                ctx.arc(0, 0, size, 0, Math.PI * 0.5);
-                ctx.stroke();
-                
-                ctx.beginPath();
-                ctx.arc(0, 0, size, Math.PI, Math.PI * 1.5);
-                ctx.stroke();
-                
-                ctx.restore();
+                // Draw RECTANGLE
+                ctx.strokeRect(screenX - boxSize/2, screenY - boxSize/2, boxSize, boxSize);
 
-                // Draw Label
+                // Label
                 ctx.fillStyle = config.useRealColors ? '#fff' : config.colorActive;
                 ctx.font = '10px monospace';
-                ctx.fillText(`${this.id} [${Math.floor(this.life)}]`, screenX + size + 5, screenY);
+                ctx.fillText(`${this.id}`, screenX + boxSize/2 + 4, screenY - boxSize/2);
                 
-                // Draw Center Dot
-                ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
+                // Crosshair center
+                ctx.beginPath();
+                ctx.moveTo(screenX - 4, screenY);
+                ctx.lineTo(screenX + 4, screenY);
+                ctx.moveTo(screenX, screenY - 4);
+                ctx.lineTo(screenX, screenY + 4);
+                ctx.stroke();
             }
         }
 
@@ -369,14 +369,33 @@
             const frame = tempCtx.getImageData(0, 0, cols, rows);
             const data = frame.data;
 
-            // Background Fade
-            ctx.fillStyle = `rgba(5, 5, 5, ${config.fadeAlpha})`;
-            ctx.fillRect(0, 0, width, height);
+            // --- BACKGROUND RENDER ---
+            if (config.showLiveBg) {
+                // 1. Draw Actual Video Stream
+                ctx.save();
+                if(config.facingMode === 'user') {
+                    ctx.translate(width, 0);
+                    ctx.scale(-1, 1);
+                }
+                ctx.drawImage(video, 0, 0, width, height);
+                ctx.restore();
+                
+                // 2. Draw Dimmer (controlled by Decay slider)
+                // Use higher minimum opacity so text is readable
+                const dimAlpha = 0.2 + (config.fadeAlpha * 0.7); 
+                ctx.fillStyle = `rgba(0, 0, 0, ${dimAlpha})`;
+                ctx.fillRect(0, 0, width, height);
+                
+            } else {
+                // Classic Decay Trails
+                ctx.fillStyle = `rgba(5, 5, 5, ${config.fadeAlpha})`;
+                ctx.fillRect(0, 0, width, height);
+            }
             
             ctx.font = `${config.gridSize}px monospace`;
             ctx.textBaseline = 'top';
 
-            // 1. DRAW GRID
+            // GRID RENDER
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const idx = (y * cols + x) * 4;
@@ -393,7 +412,8 @@
                         const char = denseChars[Math.floor(Math.random() * denseChars.length)];
                         ctx.fillText(char, posX, posY);
                     } else {
-                        if (Math.random() > 0.92) {
+                        // If live BG is on, make passive dots very subtle or invisible
+                        if (!config.showLiveBg && Math.random() > 0.92) {
                             ctx.fillStyle = config.colorPassive;
                             ctx.fillText(".", posX, posY);
                         }
@@ -401,17 +421,14 @@
                 }
             }
 
-            // 2. MANAGE TRACKERS
-            // Randomly spawn new tracker
+            // TRACKER RENDER
             if (trackers.length < MAX_TRACKERS && Math.random() > 0.95) {
-                // Find a random bright spot to start
                 let attempts = 0;
                 while(attempts < 10) {
                     const rx = Math.floor(Math.random() * cols);
                     const ry = Math.floor(Math.random() * rows);
                     const idx = (ry * cols + rx) * 4;
                     const b = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-                    
                     if (b > config.threshold) {
                         trackers.push(new Tracker(rx, ry));
                         break;
@@ -420,7 +437,6 @@
                 }
             }
 
-            // Update and Draw Trackers
             for (let i = trackers.length - 1; i >= 0; i--) {
                 const t = trackers[i];
                 t.update(data, cols, rows);
@@ -428,7 +444,7 @@
                 if (!t.active) trackers.splice(i, 1);
             }
 
-            // 3. STATIC POPUPS (The old data overlay)
+            // DATA POPUPS
             if (Math.random() > 0.92) { 
                 const rx = Math.floor(Math.random() * cols);
                 const ry = Math.floor(Math.random() * rows);
@@ -436,7 +452,6 @@
                 const screenX = rx * config.gridSize;
                 const screenY = ry * config.gridSize;
                 
-                // Don't draw popup if it overlaps a tracker (simple check)
                 let overlap = false;
                 trackers.forEach(t => {
                    if(Math.abs(t.gx - rx) < 5 && Math.abs(t.gy - ry) < 5) overlap = true;
@@ -444,14 +459,15 @@
 
                 if(!overlap) {
                     const rVal = data[idx];
-                    const txt = `HEX:#${rVal.toString(16).padStart(2,'0')}..`;
-                    ctx.fillStyle = '#ffffff';
+                    const txt = `x${rVal.toString(16)}`;
+                    ctx.fillStyle = config.showLiveBg ? '#fff' : '#aaa'; // Brighter text if BG is on
                     ctx.font = `bold 10px monospace`;
                     ctx.fillText(txt, screenX, screenY);
                 }
             }
         }
 
+        // Listeners
         inputGrid.addEventListener('input', (e) => valGrid.innerText = e.target.value);
         inputFps.addEventListener('input', (e) => valFps.innerText = e.target.value);
         inputFade.addEventListener('input', (e) => valFade.innerText = e.target.value);
@@ -477,13 +493,14 @@
         realBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             config.useRealColors = !config.useRealColors;
-            if(config.useRealColors) {
-                realBtn.classList.add('active');
-                updateTheme('#ffffff');
-            } else {
-                realBtn.classList.remove('active');
-                updateTheme(config.colorActive);
-            }
+            realBtn.classList.toggle('active', config.useRealColors);
+            updateTheme(config.useRealColors ? '#ffffff' : config.colorActive);
+        });
+
+        bgBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            config.showLiveBg = !config.showLiveBg;
+            bgBtn.classList.toggle('active', config.showLiveBg);
         });
 
     </script>
